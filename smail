@@ -94,6 +94,7 @@ do
 			while read -r body
 			do
 				[ "$body" = "EOF" ] && break
+				[ "$body" = "." ] && body=".."
 				echo "$body" > in
 			done
 			echo Done
