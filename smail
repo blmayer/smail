@@ -1,0 +1,148 @@
+#!/bin/sh
+
+[ -p in ] || mkfifo in;
+[ -p in ] || mkfifo out;
+
+state=0
+
+retry() {
+	echo Retrying...
+	case $state in
+		2)
+			echo ehlo smtp.gmail.com > in
+			;;
+		3)
+			echo auth login > in
+			;;
+		4)
+			echo $usename > in
+			;;
+		5)
+			echo $pass > in
+			;;
+		6)
+			echo 'mail from: <'$from'>' > in
+			;;
+	esac
+}
+
+
+openssl s_client -quiet -starttls smtp -connect smtp.gmail.com:587 -crlf < in > out 2> /dev/null &
+state=1
+
+echo Sending hello
+echo ehlo smtp.gmail.com > in
+state=2
+from=<your email>
+to=""
+username=<your username>  # base64
+pass=<your pass>  #base64
+
+while :
+do
+	read -r msg < out
+	echo "received: $msg"
+	case $msg in
+		"250-"*)
+			;;
+		"250 SMTPUTF8"*)
+			echo Logging in
+			state=3
+			echo auth login > in
+			;;
+		"334 VXNlcm5hbWU6"*)
+			echo Sending username
+			state=4
+			echo $usename > in
+			;;
+
+		"334 UGFzc3dvcmQ6"*)
+			echo Sending password
+			state=5
+			echo $pass > in
+			;;
+
+		"235 2.7.0 Accepted"*)
+			echo Logged in
+			state=6
+			echo 'mail from: <'$from'>' > in
+			;;
+
+		"250 2.0.0 OK"*)
+			break
+			;;
+
+		"250 2.1.0 OK"*)
+			read -p "Type recipient: " -r to
+			echo Sending mail to '<'$to'>'
+			state=7
+			echo rcpt to: '<'$to'>' > in
+			;;
+
+		"250 2.1.5 OK"*)
+			echo Starting email
+			echo data > in
+			;;
+
+		"354  Go ahead"*)
+			echo "To: $to" > in
+			echo "From: $from" > in
+			read -p "Input Subject: " -r subj
+			echo "Subject: $subj" > in
+			echo '' > in
+			echo "Type email body (End with EOF on a single line)"
+			while read -r body
+			do
+				[ "$body" = "EOF" ] && break
+				echo "$body" > in
+			done
+			echo Done
+			echo '.' > in 
+			;;
+
+		"451 4.4.2 Timeout"*)
+			echo "Connection closed"
+			break
+			;;
+
+		"501 5.5.2 Cannot Decode response"*)
+			echo "Received error!"
+			state=3
+			retry
+			;;
+		"502 5.5.1 Unrecognized command"*)
+			echo "Received error!"
+			retry
+			;;
+		"503 5.5.1 MAIL first"*)
+			echo "Received error!"
+			state=6
+			retry
+			;;
+		"530-5.7.0"*)
+			;;
+		"530 5.7.0"*)
+			echo "Received error!"
+			state=3
+			retry
+			;;
+		"535 5.7.8"*)
+			echo "Received error!"
+			state=3
+			retry
+			;;
+		"554 5.7.0"*)
+			echo "Received error!"
+			break
+			;;
+		*)
+			echo "Unrecognized message"
+			break
+			;;
+	esac
+done
+
+echo Quitting
+echo quit > in
+
+rm in out
