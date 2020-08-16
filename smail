@@ -27,29 +27,29 @@ retry() {
 	echo Retrying...
 	case $state in
 		2)
-			echo ehlo smtp.gmail.com > in
+			echo ehlo smtp.gmail.com > .in
 			;;
 		3)
-			echo auth login > in
+			echo auth login > .in
 			;;
 		4)
-			echo $usename > in
+			echo $usename > .in
 			;;
 		5)
-			echo $pass > in
+			echo $pass > .in
 			;;
 		6)
-			echo 'mail from: <'$from'>' > in
+			echo 'mail from: <'$from'>' > .in
 			;;
 	esac
 }
 
 
-openssl s_client -quiet -starttls smtp -connect smtp.gmail.com:587 -crlf < in > out 2> /dev/null &
+openssl s_client -quiet -starttls smtp -connect smtp.gmail.com:587 -crlf < .in > .out 2> /dev/null &
 state=1
 
 echo Sending hello
-echo ehlo smtp.gmail.com > in
+echo ehlo smtp.gmail.com > .in
 state=2
 from=<your email>
 to=""
@@ -58,7 +58,7 @@ pass=<your pass>  #base64
 
 while :
 do
-	read -r msg < out
+	read -r msg < .out
 	echo "received: $msg"
 	case $msg in
 		"250-"*)
@@ -66,24 +66,24 @@ do
 		"250 SMTPUTF8"*)
 			echo Logging in
 			state=3
-			echo auth login > in
+			echo auth login > .in
 			;;
 		"334 VXNlcm5hbWU6"*)
-			echo Sending username
+			echo Sending email
 			state=4
-			echo $usename > in
+			echo $email > .in
 			;;
 
 		"334 UGFzc3dvcmQ6"*)
 			echo Sending password
 			state=5
-			echo $pass > in
+			echo $password > .in
 			;;
 
 		"235 2.7.0 Accepted"*)
 			echo Logged in
 			state=6
-			echo 'mail from: <'$from'>' > in
+			echo 'mail from: <'$from'>' > .in
 			;;
 
 		"250 2.0.0 OK"*)
@@ -92,31 +92,31 @@ do
 
 		"250 2.1.0 OK"*)
 			read -p "Type recipient: " -r to
-			echo Sending mail to '<'$to'>'
+			echo Sending mail to $to
 			state=7
-			echo rcpt to: '<'$to'>' > in
+			echo rcpt to: '<'$to'>' > .in
 			;;
 
 		"250 2.1.5 OK"*)
 			echo Starting email
-			echo data > in
+			echo data > .in
 			;;
 
 		"354  Go ahead"*)
-			echo "To: $to" > in
-			echo "From: $from" > in
+			echo "To: $to" > .in
+			echo "From: $(base64 -d <<< $email)" > .in
 			read -p "Input Subject: " -r subj
-			echo "Subject: $subj" > in
-			echo '' > in
+			echo "Subject: $subj" > .in
+			echo '' > .in
 			echo "Type email body (End with EOF on a single line)"
 			while read -r body
 			do
 				[ "$body" = "EOF" ] && break
 				[ "$body" = "." ] && body=".."
-				echo "$body" > in
+				echo "$body" > .in
 			done
 			echo Done
-			echo '.' > in 
+			echo '.' > .in
 			;;
 
 		"451 4.4.2 Timeout"*)
@@ -162,6 +162,6 @@ do
 done
 
 echo Quitting
-echo quit > in
+echo quit > .in
 
-rm in out
+rm .in .out
