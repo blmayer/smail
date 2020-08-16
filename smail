@@ -51,10 +51,7 @@ state=1
 echo Sending hello
 echo ehlo smtp.gmail.com > .in
 state=2
-from=<your email>
 to=""
-username=<your username>  # base64
-pass=<your pass>  #base64
 
 while :
 do
