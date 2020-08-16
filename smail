@@ -5,18 +5,23 @@ configfile="$HOME/.config/smail/smail.conf"
 configure() {
 	echo "Running configuration"
 	[[ -ne "$HOME/.config/smail" ]] && mkdir -p "$HOME/.config/smail"
-	read -p "Enter email: " -r username
-	echo "email="$(base64 <<< $username) > $configfile
-	read -p "Enter password: " -sr password
-	echo "password="$(base64 <<< $password) >> $configfile
+	echo "Enter email:"
+	read -r username
+	echo "email=$(echo "$username" | base64 )" > "$configfile"
+	echo "Enter password:"
+	stty -echo
+	read -r password
+	stty echo
+	echo "password=$(echo "$password" | base64 )" >> "$configfile"
 	echo Done
 }
 
 # Configuration step
 [[ -e $configfile ]] || configure
 
-email=$(grep email $configfile | cut -d '=' -f 2)
-password=$(grep password $configfile | cut -d '=' -f 2)
+email=$(grep email "$configfile" | cut -d '=' -f 2)
+password=$(grep password "$configfile" | cut -d '=' -f 2)
+emaildec=$(echo "$email" | base64 -d)
 
 [ -p .in ] || mkfifo .in;
 [ -p out ] || mkfifo .out;
@@ -33,13 +38,13 @@ retry() {
 			echo auth login > .in
 			;;
 		4)
-			echo $usename > .in
+			echo "$email" > .in
 			;;
 		5)
-			echo $pass > .in
+			echo "$password" > .in
 			;;
 		6)
-			echo 'mail from: <'$from'>' > .in
+			echo 'mail from: <'"$emaildec"'>' > .in
 			;;
 	esac
 }
@@ -68,19 +73,19 @@ do
 		"334 VXNlcm5hbWU6"*)
 			echo Sending email
 			state=4
-			echo $email > .in
+			echo "$email" > .in
 			;;
 
 		"334 UGFzc3dvcmQ6"*)
 			echo Sending password
 			state=5
-			echo $password > .in
+			echo "$password" > .in
 			;;
 
 		"235 2.7.0 Accepted"*)
 			echo Logged in
 			state=6
-			echo 'mail from: <'$from'>' > .in
+			echo 'mail from: <'"$emaildec"'>' > .in
 			;;
 
 		"250 2.0.0 OK"*)
@@ -101,9 +106,12 @@ do
 
 		"354  Go ahead"*)
 			echo "To: $to" > .in
-			echo "From: $(base64 -d <<< $email)" > .in
-			read -p "Input Subject: " -r subj
+			echo "From: $emaildec" > .in
+			
+			echo "Input Subject:"
+			read -r subj
 			echo "Subject: $subj" > .in
+			
 			echo '' > .in
 			echo "Type email body (End with EOF on a single line)"
 			while read -r body
