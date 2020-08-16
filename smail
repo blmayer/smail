@@ -1,7 +1,5 @@
 #!/bin/sh
 
-configfile="$HOME/.config/smail/smail.conf"
-
 configure() {
 	echo "Running configuration"
 	[ -e "$HOME/.config/smail" ] || mkdir -p "$HOME/.config/smail"
@@ -15,21 +13,8 @@ configure() {
 	read -r password
 	stty echo
 	echo "password=$(echo "$password" | base64 )" >> "$configfile"
-
 	echo Done
 }
-
-# Configuration step
-[ -e "$configfile" ] || configure
-
-email=$(grep email "$configfile" | cut -d '=' -f 2)
-password=$(grep password "$configfile" | cut -d '=' -f 2)
-emaildec=$(echo "$email" | base64 -d)
-
-[ -p .in ] || mkfifo .in;
-[ -p out ] || mkfifo .out;
-
-state=0
 
 retry() {
 	echo Retrying...
@@ -52,7 +37,72 @@ retry() {
 	esac
 }
 
+attachments() {
+	echo "Enter file path:"
+	read -r annex
+	if [ -f "$annex" ]; then
+		echo "Enter attachment name: [$(basename "$annex")]"
+		read -r annexname
+		[ "$annexname" = "" ] && annexname="$(basename "$annex")"
 
+		echo "Content-Type: application/octet-stream" > .in
+		echo "Content-Transfer-Encoding: base64" > .in
+		echo "Content-Disposition: attachment;" > .in
+		echo " filename= \"$annexname\"" > .in
+		echo "" > .in
+		base64 "$annex" > .in
+	else
+		echo "ERROR: File not found!"
+	fi
+
+	echo "Add another attachment(s)? [y/N]"
+	read -r another
+	[ "$another" = "y" ] && { echo "--$1" > .in; attachments "$1"; }
+}
+
+
+compose() {
+	boundary="$(date | tr " :-" "wUX")"
+	echo "Type email body (End with EOF on a single line)"
+	echo "MIME-Version: 1.0" > .in
+	echo "Content-Type: multipart/mixed;" > .in
+	echo " boundary= \"$boundary\"" > .in
+	echo "" > .in
+	
+	echo "--$boundary" > .in
+	echo "Content-Type: text/plain; charset=US-ASCII" > .in
+	echo "" > .in
+	while read -r body
+	do
+		[ "$body" = "EOF" ] && break
+		[ "$body" = "." ] && body=".."
+		echo "$body" > .in
+	done
+	echo "" > .in
+	echo "--$boundary" > .in
+
+	echo "Insert attachment(s)? [y/N]"
+	read -r attach
+	[ "$attach" = "y" ] && attachments "$boundary"
+	
+	echo "--$boundary--" > .in
+}
+
+# Configuration step
+configfile="$HOME/.config/smail/smail.conf"
+[ -e "$configfile" ] || configure
+
+email=$(grep email "$configfile" | cut -d '=' -f 2)
+password=$(grep password "$configfile" | cut -d '=' -f 2)
+emaildec=$(echo "$email" | base64 -d)
+
+[ -p .in ] || mkfifo .in;
+[ -p .out ] || mkfifo .out;
+
+state=0
+
+
+# start
 openssl s_client -quiet -starttls smtp -connect smtp.gmail.com:587 -crlf < .in > .out 2> /dev/null &
 state=1
 
@@ -116,14 +166,7 @@ do
 			read -r subj
 			echo "Subject: $subj" > .in
 			
-			echo '' > .in
-			echo "Type email body (End with EOF on a single line)"
-			while read -r body
-			do
-				[ "$body" = "EOF" ] && break
-				[ "$body" = "." ] && body=".."
-				echo "$body" > .in
-			done
+			compose
 			echo Done
 			echo '.' > .in
 			;;
