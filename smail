@@ -1,7 +1,25 @@
 #!/bin/sh
 
-[ -p in ] || mkfifo in;
-[ -p in ] || mkfifo out;
+configfile="$HOME/.config/smail/smail.conf"
+
+configure() {
+	echo "Running configuration"
+	[[ -ne "$HOME/.config/smail" ]] && mkdir -p "$HOME/.config/smail"
+	read -p "Enter email: " -r username
+	echo "email="$(base64 <<< $username) > $configfile
+	read -p "Enter password: " -sr password
+	echo "password="$(base64 <<< $password) >> $configfile
+	echo Done
+}
+
+# Configuration step
+[[ -e $configfile ]] || configure
+
+email=$(grep email $configfile | cut -d '=' -f 2)
+password=$(grep password $configfile | cut -d '=' -f 2)
+
+[ -p .in ] || mkfifo .in;
+[ -p out ] || mkfifo .out;
 
 state=0
 
