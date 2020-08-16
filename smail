@@ -4,20 +4,23 @@ configfile="$HOME/.config/smail/smail.conf"
 
 configure() {
 	echo "Running configuration"
-	[[ -ne "$HOME/.config/smail" ]] && mkdir -p "$HOME/.config/smail"
+	[ -e "$HOME/.config/smail" ] || mkdir -p "$HOME/.config/smail"
+
 	echo "Enter email:"
 	read -r username
 	echo "email=$(echo "$username" | base64 )" > "$configfile"
+
 	echo "Enter password:"
 	stty -echo
 	read -r password
 	stty echo
 	echo "password=$(echo "$password" | base64 )" >> "$configfile"
+
 	echo Done
 }
 
 # Configuration step
-[[ -e $configfile ]] || configure
+[ -e "$configfile" ] || configure
 
 email=$(grep email "$configfile" | cut -d '=' -f 2)
 password=$(grep password "$configfile" | cut -d '=' -f 2)
@@ -93,10 +96,11 @@ do
 			;;
 
 		"250 2.1.0 OK"*)
-			read -p "Type recipient: " -r to
+			echo "Type recipient:"
+			read -r to
 			echo Sending mail to $to
 			state=7
-			echo rcpt to: '<'$to'>' > .in
+			echo rcpt to: '<'"$to"'>' > .in
 			;;
 
 		"250 2.1.5 OK"*)
