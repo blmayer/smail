@@ -148,7 +148,7 @@ do
 		"250 2.1.0 OK"*)
 			echo "Type recipient:"
 			read -r to
-			echo Sending mail to $to
+			echo Sending mail to "$to"
 			state=7
 			echo rcpt to: '<'"$to"'>' > .in
 			;;
