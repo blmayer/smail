@@ -70,7 +70,7 @@ compose() {
 	echo "" > .in
 	
 	echo "--$boundary" > .in
-	echo "Content-Type: text/plain; charset=US-ASCII" > .in
+	echo 'Content-Type: text/plain; charset=US-ASCII; format="flowed"' > .in
 	echo "" > .in
 	while read -r body
 	do
