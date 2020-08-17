@@ -17,8 +17,8 @@ Move to a folder in your `$PATH`.
 
 ## Configuring
 
-Currently the credentials are harcoded in it, so edit the file
-and replace. But I plan to add a prompt on the first run.
+On the first run the program will ask you to input what is
+needed.
 
 
 ## Using
