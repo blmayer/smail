@@ -39,7 +39,8 @@ retry() {
 
 attachments() {
 	echo "Enter file path:"
-	read -r annex
+	# shellcheck disable=SC2039
+	read -er annex
 	if [ -f "$annex" ]; then
 		echo "Enter attachment name: [$(basename "$annex")]"
 		read -r annexname
