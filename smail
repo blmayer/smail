@@ -41,42 +41,54 @@ add_attachments() {
 		read -r annexname
 		[ "$annexname" = "" ] && annexname="$(basename "$annex")"
 
-		echo "Content-Type: application/octet-stream" > .in
-		echo "Content-Transfer-Encoding: base64" > .in
-		echo "Content-Disposition: attachment;" > .in
-		echo " filename= \"$annexname\"" > .in
-		echo "" > .in
-		base64 "$annex" > .in
+		echo "Content-Type: application/octet-stream" >> .temp
+		echo "Content-Transfer-Encoding: base64" >> .temp
+		echo "Content-Disposition: attachment;" >> .temp
+		echo " filename= \"$annexname\"" >> .temp
+		echo "" >> .temp
+		base64 "$annex" >> .temp
 	else
 		echo "ERROR: File not found!"
 	fi
 
 	echo "Add another attachment(s)? [y/N]"
 	read -r another
-	[ "$another" = "y" ] && { echo "--$1" > .in; attachments "$1"; }
+	[ "$another" = "y" ] && { echo "--$1" >> .temp; add_attachments "$1"; }
 }
 
 compose() {
+	echo "Type recipient:"
+	read -r to
+	echo "To: $to" > .temp
+	echo "From: $emaildec" >> .temp
+
+	echo "Type subject:"
+	read -r subj
+	echo "Subject: $subj" >> .temp
+
 	boundary="$(date | tr " :-" "wUX")"
-	echo "MIME-Version: 1.0" > .in
-	echo "Content-Type: multipart/mixed;" > .in
-	echo " boundary= \"$boundary\"" > .in
-	echo "" > .in
+	echo "MIME-Version: 1.0" >> .temp
+	echo "Content-Type: multipart/mixed;" >> .temp
+	echo " boundary= \"$boundary\"" >> .temp
+	echo "" >> .temp
 	
-	echo "--$boundary" > .in
-	echo 'Content-Type: text/plain; charset=US-ASCII' > .in
-	echo "" > .in
-	$editor .temp
-	sed 's/^.$/../' .temp | fold -w 72 -s > .in
-	echo "" > .in
-	echo "--$boundary" > .in
-	rm .temp
+	echo "--$boundary" >> .temp
+	echo 'Content-Type: text/plain; charset=US-ASCII' >> .temp
+	echo "" >> .temp
+
+	# echo "" > .body
+	$editor .body
+	sed 's/^.$/../' .body | fold -w 72 -s >> .temp
+	rm .body
+
+	echo "" >> .temp
+	echo "--$boundary" >> .temp
 
 	echo "Insert attachment(s)? [y/N]"
 	read -r attach
-	[ "$attach" = "y" ] && attachments "$boundary"
-	
-	echo "--$boundary--" > .in
+	[ "$attach" = "y" ] && add_attachments "$boundary"
+
+	echo "--$boundary--" >> .temp
 }
 
 retry() {
