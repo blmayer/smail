@@ -100,8 +100,9 @@ configfile="$HOME/.config/smail/smail.conf"
 [ -e "$configfile" ] || configure
 
 email=$(grep email "$configfile" | cut -d '=' -f 2)
-password=$(grep password "$configfile" | cut -d '=' -f 2)
 emaildec=$(echo "$email" | base64 -d)
+password=$(grep password "$configfile" | cut -d '=' -f 2)
+editor=$(grep editor "$configfile" | cut -d '=' -f 2)
 
 [ -p .in ] || mkfifo .in;
 [ -p .out ] || mkfifo .out;
@@ -161,7 +162,6 @@ do
 			;;
 
 		"250 2.1.5 OK"*)
-			echo Starting email
 			echo data > .in
 			;;
 
