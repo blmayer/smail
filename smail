@@ -118,6 +118,110 @@ retry() {
 	esac
 }
 
+send() {
+	while :
+	do
+		read -r msg < .out
+		echo "received: $msg"
+		case $msg in
+			"250-"*)
+				;;
+
+			"250 SMTPUTF8"*)
+				echo logging in
+				state=3
+				echo auth login > .in
+				;;
+
+			"334 VXNlcm5hbWU6"*)
+				echo sending email
+				state=4
+				echo "$email" > .in
+				;;
+
+			"334 UGFzc3dvcmQ6"*)
+				echo sending password
+				state=5
+				echo "$password" > .in
+				;;
+
+			"235 2.7.0"*)
+				echo logged in
+				state=6
+				echo 'mail from: <'"$emaildec"'>'
+				echo 'mail from: <'"$emaildec"'>' > .in
+				;;
+
+			"250 2.0.0"*)
+				break
+				;;
+
+			"250 2.1.0"*)
+				state=7
+				echo rcpt to: '<'"$to"'>'
+				echo rcpt to: '<'"$to"'>' > .in
+				;;
+
+			"250 2.1.5"*)
+				echo data > .in
+				;;
+
+			"354  Go ahead"*)
+				cat .temp > .in
+				echo '.' > .in
+				;;
+
+			"451 4.4.2 Timeout"*)
+				echo "Connection closed"
+				break
+				;;
+
+			"501 5.5.2 Cannot Decode response"*)
+				echo "Received error!"
+				state=3
+				retry
+				;;
+			"502 5.5.1 Unrecognized command"*)
+				echo "Received error!"
+				retry
+				;;
+			"503 5.5.1 MAIL first"*)
+				echo "Received error!"
+				state=6
+				retry
+				;;
+			"530-5.7.0"*)
+				;;
+			"530 5.7.0"*)
+				echo "Received error!"
+				state=3
+				retry
+				;;
+			"535 5.7.8"*)
+				echo "Received error!"
+				state=3
+				retry
+				;;
+			"553 5.1.3"*)
+				retry
+				;;
+			"554 5.7.0"*)
+				echo "Received error!"
+				break
+				;;
+			"555 5.5.2 Syntax error"*)
+				echo "Received error!"
+				break
+				;;
+
+			*)
+				echo "Unrecognized message"
+				break
+				;;
+		esac
+	done
+}
+
 # Configuration step
 configfile="$HOME/.config/smail/smail.conf"
 [ -e "$configfile" ] || configure
@@ -132,121 +236,11 @@ editor=$(grep editor "$configfile" | cut -d '=' -f 2)
 
 state=0
 
-
-# start
-openssl s_client -quiet -starttls smtp -connect smtp.gmail.com:587 -crlf < .in > .out 2> /dev/null &
-state=1
-
-echo Sending hello
-echo ehlo smtp.gmail.com > .in
-state=2
-to=""
-
-while :
-do
-	read -r msg < .out
-	echo "received: $msg"
-	case $msg in
-		"250-"*)
-			;;
-		"250 SMTPUTF8"*)
-			echo Logging in
-			state=3
-			echo auth login > .in
-			;;
-		"334 VXNlcm5hbWU6"*)
-			echo Sending email
-			state=4
-			echo "$email" > .in
-			;;
-
-		"334 UGFzc3dvcmQ6"*)
-			echo Sending password
-			state=5
-			echo "$password" > .in
-			;;
-
-		"235 2.7.0 Accepted"*)
-			echo Logged in
-			state=6
-			echo 'mail from: <'"$emaildec"'>' > .in
-			;;
-
-		"250 2.0.0 OK"*)
-			break
-			;;
-
-		"250 2.1.0 OK"*)
-			echo "Type recipient:"
-			read -r to
-			echo Sending mail to "$to"
-			state=7
-			echo rcpt to: '<'"$to"'>' > .in
-			;;
-
-		"250 2.1.5 OK"*)
-			echo data > .in
-			;;
-
-		"354  Go ahead"*)
-			echo "To: $to" > .in
-			echo "From: $emaildec" > .in
-			
-			echo "Input Subject:"
-			read -r subj
-			echo "Subject: $subj" > .in
-			
-			compose
-			echo Done
-			echo '.' > .in
-			;;
-
-		"451 4.4.2 Timeout"*)
-			echo "Connection closed"
-			break
-			;;
-
-		"501 5.5.2 Cannot Decode response"*)
-			echo "Received error!"
-			state=3
-			retry
-			;;
-		"502 5.5.1 Unrecognized command"*)
-			echo "Received error!"
-			retry
-			;;
-		"503 5.5.1 MAIL first"*)
-			echo "Received error!"
-			state=6
-			retry
-			;;
-		"530-5.7.0"*)
-			;;
-		"530 5.7.0"*)
-			echo "Received error!"
-			state=3
-			retry
-			;;
-		"535 5.7.8"*)
-			echo "Received error!"
-			state=3
-			retry
-			;;
-		"553 5.1.3"*)
-			retry
-			;;
-		"554 5.7.0"*)
-			echo "Received error!"
-			break
-			;;
-		*)
-			echo "Unrecognized message"
-			break
-			;;
-	esac
-done
+compose
+connect
+send
 
 echo Quitting
 echo quit > .in
 
-rm .in .out
+rm .in .out .temp
