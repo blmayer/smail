@@ -69,7 +69,7 @@ attachments() {
 
 
 compose() {
-	boundary="$(date | tr " :-" "wUX")"
+	local boundary="$(date | tr " :-" "wUX")"
 	echo "Type email body (End with CTRL+d)"
 	echo "MIME-Version: 1.0" > .in
 	echo "Content-Type: multipart/mixed;" > .in
