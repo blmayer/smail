@@ -21,7 +21,18 @@ configure() {
 	echo Done
 }
 
-attachments() {
+connect() {
+	openssl s_client -quiet \
+		-starttls smtp \
+		-connect smtp.gmail.com:587 \
+		-crlf < .in > .out 2> /dev/null &
+	state=1
+
+	echo ehlo smtp.gmail.com > .in
+	state=2
+}
+
+add_attachments() {
 	echo "Enter file path:"
 	# shellcheck disable=SC2039
 	read -er annex
