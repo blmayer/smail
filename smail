@@ -13,34 +13,12 @@ configure() {
 	read -r password
 	stty echo
 	echo "password=$(echo "$password" | base64 )" >> "$configfile"
-	echo Done
-}
 
-retry() {
-	echo Retrying...
-	case $state in
-		2)
-			echo ehlo smtp.gmail.com > .in
-			;;
-		3)
-			echo auth login > .in
-			;;
-		4)
-			echo "$email" > .in
-			;;
-		5)
-			echo "$password" > .in
-			;;
-		6)
-			echo 'mail from: <'"$emaildec"'>' > .in
-			;;
-		7)
-			echo "Type recipient:"
-			read -r to
-			echo Sending mail to "$to"
-			echo rcpt to: '<'"$to"'>' > .in
-			;;
-	esac
+	echo "Enter your favorite editor: [vi]"
+	# shellcheck disable=SC2039
+	read -re editor
+	echo "editor=${editor:-vi}" >> "$configfile"
+	echo Done
 }
 
 attachments() {
@@ -88,6 +66,33 @@ compose() {
 	[ "$attach" = "y" ] && attachments "$boundary"
 	
 	echo "--$boundary--" > .in
+}
+
+retry() {
+	echo Retrying...
+	case $state in
+		2)
+			echo ehlo smtp.gmail.com > .in
+			;;
+		3)
+			echo auth login > .in
+			;;
+		4)
+			echo "$email" > .in
+			;;
+		5)
+			echo "$password" > .in
+			;;
+		6)
+			echo 'mail from: <'"$emaildec"'>' > .in
+			;;
+		7)
+			echo "Type recipient:"
+			read -r to
+			echo Sending mail to "$to"
+			echo rcpt to: '<'"$to"'>' > .in
+			;;
+	esac
 }
 
 # Configuration step
