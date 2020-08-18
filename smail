@@ -67,10 +67,8 @@ attachments() {
 	[ "$another" = "y" ] && { echo "--$1" > .in; attachments "$1"; }
 }
 
-
 compose() {
-	local boundary="$(date | tr " :-" "wUX")"
-	echo "Type email body (End with CTRL+d)"
+	boundary="$(date | tr " :-" "wUX")"
 	echo "MIME-Version: 1.0" > .in
 	echo "Content-Type: multipart/mixed;" > .in
 	echo " boundary= \"$boundary\"" > .in
