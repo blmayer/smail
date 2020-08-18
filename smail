@@ -75,15 +75,13 @@ compose() {
 	echo "" > .in
 	
 	echo "--$boundary" > .in
-	echo 'Content-Type: text/plain; charset=US-ASCII; format="flowed"' > .in
+	echo 'Content-Type: text/plain; charset=US-ASCII' > .in
 	echo "" > .in
-	while read -r body
-	do
-		[ "$body" = "." ] && body=".."
-		echo "$body" > .in
-	done
+	$editor .temp
+	sed 's/^.$/../' .temp | fold -w 72 -s > .in
 	echo "" > .in
 	echo "--$boundary" > .in
+	rm .temp
 
 	echo "Insert attachment(s)? [y/N]"
 	read -r attach
