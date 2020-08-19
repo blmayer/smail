@@ -37,7 +37,12 @@ goodbye() {
 		9)
 			[ -e $debug ] || echo "Erasing .temp and sending quit command"
 			rm .temp
+			echo rset > .in
+			echo quit > .in
 			exit 3
+			;;
+		10)
+			echo quit > .in
 			;;
 		*)
 			exit 2
@@ -143,11 +148,19 @@ compose() {
 	echo "Type recipient(s) (comma separated):"
 	read -r to
 
-	# Transform into list for sending Vlater
+	# Transform into list for sending later
 	n=$(($(echo "$to" | tr -d -c ',' | wc -c | xargs) + 1))
 
 	echo "To: $to" > .temp
 	echo "From: $emaildec" >> .temp
+
+	echo "Type Cc(s): (comma separated)"
+	read -r cc
+	[ ! -z "$cc" ] || echo "Cc: $cc" >> .temp
+
+	echo "Type Cco(s): (comma separated)"
+	read -r cco
+	[ ! -z "$cco" ] || echo "Cco: $cco" >> .temp
 
 	echo "Type subject:"
 	read -r subj
@@ -259,6 +272,8 @@ send() {
 				;;
 
 			"250 2.0.0"*)
+				state=10
+				rm .temp
 				break
 				;;
 
