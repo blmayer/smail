@@ -75,6 +75,7 @@ connect() {
 		-crlf < .in > .out 2> /dev/null &
 	state=1
 
+	[ -e $debug ] || echo "Sending client hello"
 	echo ehlo smtp.gmail.com > .in
 	state=2
 }
@@ -94,6 +95,7 @@ add_attachments() {
 		echo " filename= \"$annexname\"" >> .temp
 		echo "" >> .temp
 		base64 "$annex" >> .temp
+		[ -e $debug ] || echo "Added $annex with name: $annexname"
 	else
 		echo "ERROR: File not found!"
 	fi
@@ -112,6 +114,8 @@ compose() {
 	echo "Type subject:"
 	read -r subj
 	echo "Subject: $subj" >> .temp
+	[ -e $debug ] || echo "Email fields:"
+	[ -e $debug ] || cat .temp
 
 	boundary="$(date | tr " :-" "wUX")"
 	echo "MIME-Version: 1.0" >> .temp
@@ -126,6 +130,8 @@ compose() {
 	# echo "" > .body
 	$editor .body
 	sed 's/^.$/../' .body | fold -w 72 -s >> .temp
+	[ -e $debug ] || echo "Email body:"
+	[ -e $debug ] || cat .body
 	rm .body
 
 	echo "" >> .temp
@@ -142,21 +148,27 @@ retry() {
 	echo Retrying...
 	case $state in
 		2)
+			[ -e $debug ] || echo "Reconnecting..."
 			echo ehlo smtp.gmail.com > .in
 			;;
 		3)
+			[ -e $debug ] || echo "Logging in again..."
 			echo auth login > .in
 			;;
 		4)
+			[ -e $debug ] || echo "Connection closed"
 			echo "$email" > .in
 			;;
 		5)
+			[ -e $debug ] || echo "Connection closed"
 			echo "$password" > .in
 			;;
 		6)
+			[ -e $debug ] || echo "Connection closed"
 			echo 'mail from: <'"$emaildec"'>' > .in
 			;;
 		7)
+			[ -e $debug ] || echo "Sending recipient"
 			echo "Type recipient:"
 			read -r to
 			echo Sending mail to "$to"
@@ -169,33 +181,32 @@ send() {
 	while :
 	do
 		read -r msg < .out
-		echo "received: $msg"
+		[ -e $debug ] || echo "received: $msg"
 		case $msg in
 			"250-"*)
 				;;
 
 			"250 SMTPUTF8"*)
-				echo logging in
+				[ -e $debug ] || echo logging in
 				state=3
 				echo auth login > .in
 				;;
 
 			"334 VXNlcm5hbWU6"*)
-				echo sending email
+				[ -e $debug ] || echo sending email
 				state=4
 				echo "$email" > .in
 				;;
 
 			"334 UGFzc3dvcmQ6"*)
-				echo sending password
+				[ -e $debug ] || echo sending password
 				state=5
 				echo "$password" > .in
 				;;
 
 			"235 2.7.0"*)
-				echo logged in
+				[ -e $debug ] || echo logged in
 				state=6
-				echo 'mail from: <'"$emaildec"'>'
 				echo 'mail from: <'"$emaildec"'>' > .in
 				;;
 
@@ -205,7 +216,6 @@ send() {
 
 			"250 2.1.0"*)
 				state=7
-				echo rcpt to: '<'"$to"'>'
 				echo rcpt to: '<'"$to"'>' > .in
 				;;
 
@@ -219,33 +229,28 @@ send() {
 				;;
 
 			"451 4.4.2 Timeout"*)
-				echo "Connection closed"
+				[ -e $debug ] || echo "Connection closed"
 				break
 				;;
 
 			"501 5.5.2 Cannot Decode response"*)
-				echo "Received error!"
 				state=3
 				retry
 				;;
 			"502 5.5.1 Unrecognized command"*)
-				echo "Received error!"
 				retry
 				;;
 			"503 5.5.1 MAIL first"*)
-				echo "Received error!"
 				state=6
 				retry
 				;;
 			"530-5.7.0"*)
 				;;
 			"530 5.7.0"*)
-				echo "Received error!"
 				state=3
 				retry
 				;;
 			"535 5.7.8"*)
-				echo "Received error!"
 				state=3
 				retry
 				;;
@@ -253,16 +258,13 @@ send() {
 				retry
 				;;
 			"554 5.7.0"*)
-				echo "Received error!"
 				break
 				;;
 			"555 5.5.2 Syntax error"*)
-				echo "Received error!"
 				break
 				;;
-
 			*)
-				echo "Unrecognized message"
+				[ -e $debug ] || echo "Unrecognized message"
 				break
 				;;
 		esac
@@ -287,7 +289,8 @@ compose
 connect
 send
 
-echo Quitting
+[ -e $debug ] || echo Quitting
 echo quit > .in
 
 rm .in .out .temp
+
