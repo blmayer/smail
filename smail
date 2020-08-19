@@ -135,9 +135,17 @@ add_attachments() {
 	[ "$another" = "y" ] && { echo "--$1" >> .temp; add_attachments "$1"; }
 }
 
+get_rcpt() {
+	echo $to | cut -d ',' -f $1
+}
+
 compose() {
-	echo "Type recipient:"
+	echo "Type recipient(s) (comma separated):"
 	read -r to
+
+	# Transform into list for sending Vlater
+	n=$(($(echo "$to" | tr -d -c ',' | wc -c | xargs) + 1))
+
 	echo "To: $to" > .temp
 	echo "From: $emaildec" >> .temp
 
@@ -255,13 +263,23 @@ send() {
 				;;
 
 			"250 2.1.0"*)
+				[ -e $debug ] || echo $(get_rcpt $n)
 				state=7
-				echo rcpt to: '<'"$to"'>' > .in
+				echo rcpt to: '<'$(get_rcpt $n)'>' > .in
+				n=$((n - 1))
 				;;
 
 			"250 2.1.5"*)
-				state=8
-				echo data > .in
+				if [ ! $n = 0 ]
+				then
+					[ -e $debug ] || echo $(get_rcpt $n)
+					echo rcpt to: '<'$(get_rcpt $n)'>' > .in
+					n=$((n - 1))
+				else
+					[ -e $debug ] || echo data
+					state=8
+					echo data > .in
+				fi
 				;;
 
 			"354  Go ahead"*)
