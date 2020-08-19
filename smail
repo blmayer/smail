@@ -271,8 +271,11 @@ send() {
 	done
 }
 
-# Configuration step
+# Read arguments
 configfile="$HOME/.config/smail/smail.conf"
+read_opts "$@"
+
+# Configuration step
 [ -e "$configfile" ] || configure
 
 email=$(grep email "$configfile" | cut -d '=' -f 2)
