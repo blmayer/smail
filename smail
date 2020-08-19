@@ -1,5 +1,52 @@
 #!/bin/sh
 
+usage() {
+	echo "Smail v1.0.0: A very simple SMTP client"
+	echo "Usage:"
+	echo "  $0 [options] [command]"
+	echo "Available opitons are:"
+	echo "  -v	verbose output"
+	echo "  -h	show this help"
+	echo "Available commands:"
+	echo "  send	runs the send email interface, default"
+	echo "  config	runs the configuration script, also on first run"
+	echo "  help	show this help"
+	echo "Examples:"
+	echo "Run the configuration script:"
+	echo "  $0 config"
+	echo "Send an email:"
+	echo "  $0"
+}
+
+read_opts() {
+	for arg in "$@"
+	do
+		case $arg in
+			"-v")
+				debug=1
+				;;
+			"-h" | "help")
+				usage
+				exit 0
+				;;
+			"send")
+				;;
+			"config")
+				configure
+				exit 0
+				;;
+			"")
+				break
+				;;
+			*)
+				echo Unrecognized option
+				usage
+				exit 1
+				;;
+		esac
+	done
+}
+
 configure() {
 	echo "Running configuration"
 	[ -e "$HOME/.config/smail" ] || mkdir -p "$HOME/.config/smail"
