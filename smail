@@ -199,9 +199,6 @@ retry() {
 			;;
 		7)
 			[ -e $debug ] || echo "Resending recipient"
-			echo "Type recipient:"
-			read -r to
-			echo Sending mail to "$to"
 			echo rcpt to: '<'"$to"'>' > .in
 			;;
 		8)
@@ -222,6 +219,10 @@ send() {
 		read -r msg < .out
 		[ -e $debug ] || echo "received: $msg"
 		case $msg in
+			"221 2.0.0"*)
+				retry
+				;;
+
 			"250-"*)
 				;;
 
