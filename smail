@@ -1,5 +1,7 @@
 #!/bin/sh
 
+trap goodbye EXIT INT HUP
+
 usage() {
 	echo "Smail v1.0.0: A very simple SMTP client"
 	echo "Usage:"
@@ -16,6 +18,34 @@ usage() {
 	echo "  $0 config"
 	echo "Send an email:"
 	echo "  $0"
+}
+
+goodbye() {
+	[ -e $debug ] || echo Quitting
+	case $state in
+		1|2|3|6|7|8)
+			[ -e $debug ] || echo "Sending quit command"
+			echo rset > .in
+			echo quit > .in
+			;;
+		4|5)
+			[ -e $debug ] || echo "Dropping and sending quit command"
+			echo "" > .in
+			echo rset > .in
+			echo quit > .in
+			;;
+		9)
+			[ -e $debug ] || echo "Erasing .temp and sending quit command"
+			rm .temp
+			exit 3
+			;;
+		*)
+			exit 2
+			;;
+	esac
+
+	rm .in .out
+	exit 0
 }
 
 read_opts() {
@@ -156,23 +186,32 @@ retry() {
 			echo auth login > .in
 			;;
 		4)
-			[ -e $debug ] || echo "Connection closed"
+			[ -e $debug ] || echo "Resending email"
 			echo "$email" > .in
 			;;
 		5)
-			[ -e $debug ] || echo "Connection closed"
+			[ -e $debug ] || echo "Resending password"
 			echo "$password" > .in
 			;;
 		6)
-			[ -e $debug ] || echo "Connection closed"
+			[ -e $debug ] || echo "Resending mail command"
 			echo 'mail from: <'"$emaildec"'>' > .in
 			;;
 		7)
-			[ -e $debug ] || echo "Sending recipient"
+			[ -e $debug ] || echo "Resending recipient"
 			echo "Type recipient:"
 			read -r to
 			echo Sending mail to "$to"
 			echo rcpt to: '<'"$to"'>' > .in
+			;;
+		8)
+			[ -e $debug ] || echo "Resending data command"
+			echo data > .in
+			;;
+		9)
+			[ -e $debug ] || echo "Resending data"
+			cat .temp > .in
+			echo '.' > .in
 			;;
 	esac
 }
@@ -220,10 +259,12 @@ send() {
 				;;
 
 			"250 2.1.5"*)
+				state=8
 				echo data > .in
 				;;
 
 			"354  Go ahead"*)
+				state=9
 				cat .temp > .in
 				echo '.' > .in
 				;;
@@ -291,9 +332,5 @@ state=0
 compose
 connect
 send
-
-[ -e $debug ] || echo Quitting
-echo quit > .in
-
-rm .in .out .temp
+goodbye
 
