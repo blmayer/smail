@@ -266,7 +266,7 @@ send() {
 				;;
 
 			"235 2.7.0"*)
-				[ -e $debug ] || echo logged in
+				[ -e $debug ] || { echo logged in; echo "$emaildec"; }
 				state=6
 				echo 'mail from: <'"$emaildec"'>' > .in
 				;;
@@ -336,6 +336,7 @@ send() {
 				break
 				;;
 			"555 5.5.2 Syntax error"*)
+				echo FATAL ERROR email not sent
 				break
 				;;
 			*)
