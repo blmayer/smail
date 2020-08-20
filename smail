@@ -148,19 +148,19 @@ compose() {
 	echo "Type recipient(s) (comma separated):"
 	read -r to
 
-	# Transform into list for sending later
-	n=$(($(echo "$to" | tr -d -c ',' | wc -c | xargs) + 1))
-
 	echo "To: $to" > .temp
 	echo "From: $emaildec" >> .temp
 
 	echo "Type Cc(s): (comma separated)"
 	read -r cc
-	[ ! -z "$cc" ] || echo "Cc: $cc" >> .temp
+	[ ! -z "$cc" ] && { echo "Cc: $cc" >> .temp; to="$to,$cc"; }
 
 	echo "Type Cco(s): (comma separated)"
 	read -r cco
-	[ ! -z "$cco" ] || echo "Cco: $cco" >> .temp
+	[ ! -z "$cco" ] && { echo "Cco: $cco" >> .temp; to="$to,$cco"; }
+
+	# Transform into list for sending later
+	n=$(($(echo "$to" | tr -d -c ',' | wc -c | xargs) + 1))
 
 	echo "Type subject:"
 	read -r subj
