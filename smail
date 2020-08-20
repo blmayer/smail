@@ -4,15 +4,21 @@ trap goodbye INT HUP
 
 usage() {
 	echo "Smail v1.0.0: A very simple SMTP client"
+	echo ""
 	echo "Usage:"
 	echo "  $0 [options] [command]"
-	echo "Available opitons are:"
-	echo "  -v	verbose output"
-	echo "  -h	show this help"
+	echo ""
+	echo "Options"
+	echo "  -v		verbose output"
+	echo "  -h		show this help"
+	echo "  --help		show this help"
+	echo "  --version	show version info"
+	echo ""
 	echo "Available commands:"
-	echo "  send	runs the send email interface, default"
-	echo "  config	runs the configuration script, also on first run"
-	echo "  help	show this help"
+	echo "  send		runs the send email interface, default"
+	echo "  config		runs the configuration script, also on first run"
+	echo "  help		show this help"
+	echo ""
 	echo "Examples:"
 	echo "Run the configuration script:"
 	echo "  $0 config"
@@ -60,8 +66,12 @@ read_opts() {
 			"-v")
 				debug=1
 				;;
-			"-h" | "help")
+			"-h" | "help" | "--help")
 				usage
+				exit 0
+				;;
+			"--version")
+				show_version
 				exit 0
 				;;
 			"send")
