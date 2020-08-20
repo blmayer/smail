@@ -20,10 +20,24 @@ usage() {
 	echo "  help		show this help"
 	echo ""
 	echo "Examples:"
-	echo "Run the configuration script:"
-	echo "  $0 config"
-	echo "Send an email:"
-	echo "  $0"
+	echo "  $0 config	Run the configuration script"
+	echo "  $0		Send an email"
+	echo ""
+	echo "Report bugs to: bleemayer@gmail.com"
+	echo "Home page: <https://www.github.com/blmayer/smail/>"
+	echo "General help: <https://www.github.com/blmayer/smail/wiki>"
+}
+
+show_version() {
+	echo "Smail 0.1.0"
+	echo "Copyright (C) 2020 Brian Mayer"
+	echo "License MIT: MIT License <https://opensource.org/licenses/MIT>"
+	echo "THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,"
+	echo "EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF"
+	echo "MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT."
+
+
+
 }
 
 goodbye() {
