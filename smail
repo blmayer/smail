@@ -3,25 +3,24 @@
 trap goodbye INT HUP
 
 usage() {
-	echo "Smail v1.0.0: A very simple SMTP client"
+	echo "Smail v0.1.0: Send emails from your terminal using a very simple SMTP client."
 	echo ""
-	echo "Usage:"
-	echo "  $0 [options] [command]"
+	echo "Usage: smail [options] [command]"
 	echo ""
-	echo "Options"
+	echo "Options:"
 	echo "  -v		verbose output"
 	echo "  -h		show this help"
 	echo "  --help		show this help"
 	echo "  --version	show version info"
 	echo ""
-	echo "Available commands:"
+	echo "Commands:"
 	echo "  send		runs the send email interface, default"
 	echo "  config		runs the configuration script, also on first run"
 	echo "  help		show this help"
 	echo ""
 	echo "Examples:"
-	echo "  $0 config	Run the configuration script"
-	echo "  $0		Send an email"
+	echo "  smail config	Run the configuration script"
+	echo "  smail		Send an email"
 	echo ""
 	echo "Report bugs to: bleemayer@gmail.com"
 	echo "Home page: <https://www.github.com/blmayer/smail/>"
@@ -29,15 +28,14 @@ usage() {
 }
 
 show_version() {
-	echo "Smail 0.1.0"
-	echo "Copyright (C) 2020 Brian Mayer"
-	echo "License MIT: MIT License <https://opensource.org/licenses/MIT>"
+	echo "smail 0.1.0"
+	echo "Copyright (C) 2020 Brian Mayer."
+	#echo "License MIT: MIT License <https://opensource.org/licenses/MIT>"
 	echo "THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,"
 	echo "EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF"
 	echo "MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT."
-
-
-
+	echo ""
+	echo "Written by Brian Lee Mayer."
 }
 
 goodbye() {
