@@ -140,7 +140,7 @@ connect() {
 add_attachments() {
 	echo "Enter file path:"
 	# shellcheck disable=SC2039
-	read -er annex
+	read -e annex
 	if [ -f "$annex" ]; then
 		echo "Enter attachment name: [$(basename "$annex")]"
 		read -r annexname
