@@ -146,11 +146,13 @@ add_attachments() {
 		read -r annexname
 		[ "$annexname" = "" ] && annexname="$(basename "$annex")"
 
-		echo "Content-Type: application/octet-stream" >> .temp
-		echo "Content-Transfer-Encoding: base64" >> .temp
-		echo "Content-Disposition: attachment;" >> .temp
-		echo " filename= \"$annexname\"" >> .temp
-		echo "" >> .temp
+		{
+			echo "Content-Type: application/octet-stream"
+			echo "Content-Transfer-Encoding: base64"
+			echo "Content-Disposition: attachment;"
+			echo " filename= \"$annexname\""
+			echo ""
+		} >> .temp
 		base64 "$annex" >> .temp
 		[ -e $debug ] || echo "Added $annex with name: $annexname"
 	else
@@ -191,16 +193,17 @@ compose() {
 	[ -e $debug ] || cat .temp
 
 	boundary="$(date | tr " :-" "wUX")"
-	echo "MIME-Version: 1.0" >> .temp
-	echo "Content-Type: multipart/mixed;" >> .temp
-	echo " boundary= \"$boundary\"" >> .temp
-	echo "" >> .temp
+	{
+		echo "MIME-Version: 1.0"
+		echo "Content-Type: multipart/mixed;"
+		echo " boundary= \"$boundary\""
+		echo ""
 	
-	echo "--$boundary" >> .temp
-	echo 'Content-Type: text/plain; charset=US-ASCII' >> .temp
-	echo "" >> .temp
+		echo "--$boundary"
+		echo 'Content-Type: text/plain; charset=US-ASCII'
+		echo ""
+	} >> .temp
 
-	# echo "" > .body
 	$editor .body
 	sed 's/^.$/../' .body | fold -w 72 -s >> .temp
 	[ -e $debug ] || echo "Email body:"
@@ -300,17 +303,17 @@ send() {
 				;;
 
 			"250 2.1.0"*)
-				[ -e "$debug" ] || echo "$(get_rcpt $n)"
+				[ -e "$debug" ] || get_rcpt "$n"
 				state=7
-				echo rcpt to: '<'$(get_rcpt $n)'>' > .in
+				echo rcpt to: '<'"$(get_rcpt $n)"'>' > .in
 				n=$((n - 1))
 				;;
 
 			"250 2.1.5"*)
 				if [ ! $n = 0 ]
 				then
-					[ -e $debug ] || echo "$(get_rcpt $n)"
-					echo rcpt to: '<'$(get_rcpt $n)'>' > .in
+					[ -e $debug ] || get_rcpt "$n"
+					echo rcpt to: '<'"$(get_rcpt $n)"'>' > .in
 					n=$((n - 1))
 				else
 					[ -e $debug ] || echo data
