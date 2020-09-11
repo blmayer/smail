@@ -39,21 +39,21 @@ show_version() {
 }
 
 goodbye() {
-	[ -e $debug ] || echo Quitting
+	[ -e "$debug" ] || echo Quitting
 	case $state in
 		1|2|3|6|7|8)
-			[ -e $debug ] || echo "Sending quit command"
+			[ -e "$debug" ] || echo "Sending quit command"
 			echo rset > .in
 			echo quit > .in
 			;;
 		4|5)
-			[ -e $debug ] || echo "Dropping and sending quit command"
+			[ -e "$debug" ] || echo "Dropping and sending quit command"
 			echo "" > .in
 			echo rset > .in
 			echo quit > .in
 			;;
 		9)
-			[ -e $debug ] || echo "Erasing .temp and sending quit command"
+			[ -e "$debug" ] || echo "Erasing .temp and sending quit command"
 			rm .temp
 			echo rset > .in
 			echo quit > .in
@@ -139,7 +139,7 @@ connect() {
 
 add_attachments() {
 	echo "Enter file path:"
-	# shellcheck disable=SC2039
+	# shellcheck disable=SC2039,SC2162
 	read -e annex
 	if [ -f "$annex" ]; then
 		echo "Enter attachment name: [$(basename "$annex")]"
@@ -163,7 +163,7 @@ add_attachments() {
 }
 
 get_rcpt() {
-	echo $to | cut -d ',' -f $1
+	echo "$to" | cut -d ',' -f "$1"
 }
 
 compose() {
@@ -175,11 +175,11 @@ compose() {
 
 	echo "Type Cc(s): (comma separated)"
 	read -r cc
-	[ ! -z "$cc" ] && { echo "Cc: $cc" >> .temp; to="$to,$cc"; }
+	[ -n "$cc" ] && { echo "Cc: $cc" >> .temp; to="$to,$cc"; }
 
 	echo "Type Cco(s): (comma separated)"
 	read -r cco
-	[ ! -z "$cco" ] && { echo "Cco: $cco" >> .temp; to="$to,$cco"; }
+	[ -n "$cco" ] && { echo "Cco: $cco" >> .temp; to="$to,$cco"; }
 
 	# Transform into list for sending later
 	n=$(($(echo "$to" | tr -d -c ',' | wc -c | xargs) + 1))
@@ -300,7 +300,7 @@ send() {
 				;;
 
 			"250 2.1.0"*)
-				[ -e $debug ] || echo $(get_rcpt $n)
+				[ -e "$debug" ] || echo "$(get_rcpt $n)"
 				state=7
 				echo rcpt to: '<'$(get_rcpt $n)'>' > .in
 				n=$((n - 1))
@@ -309,7 +309,7 @@ send() {
 			"250 2.1.5"*)
 				if [ ! $n = 0 ]
 				then
-					[ -e $debug ] || echo $(get_rcpt $n)
+					[ -e $debug ] || echo "$(get_rcpt $n)"
 					echo rcpt to: '<'$(get_rcpt $n)'>' > .in
 					n=$((n - 1))
 				else
