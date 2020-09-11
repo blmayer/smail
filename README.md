@@ -14,7 +14,7 @@
 
 ## Installing
 
-Move to a folder in your `$PATH`.
+Run `make install`.
 
 
 ## Configuring
@@ -25,8 +25,8 @@ needed.
 
 ## Using
 
-Run `smail`, it will prompt the needed information, like recipient,
-subject and the body.
+Run `smail`, it will prompt the needed information, like recipients,
+subject and the body and/or attachments.
 
 
 ## Providers
