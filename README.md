@@ -1,6 +1,8 @@
 # smail
 
-Simplest email client for the terminal. It is just a telnet.
+[![Build Status](https://travis-ci.com/blmayer/smail.svg?branch=master)](https://travis-ci.com/blmayer/smail)
+
+> Simplest email client for the terminal. It is just a telnet.
 
 
 ## Requirements
