@@ -1,6 +1,6 @@
 # smail
 
-[![Build Status](https://travis-ci.com/blmayer/smail.svg?branch=master)](https://travis-ci.com/blmayer/smail)
+![Build Status](https://img.shields.io/travis/blmayer/smail/master.svg?label=shellcheck)
 
 > Simplest email client for the terminal. It is just a telnet.
 
