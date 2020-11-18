@@ -1,6 +1,6 @@
 #!/bin/sh
 
-trap goodbye INT HUP
+#trap goodbye INT HUP
 
 usage() {
 	echo "Smail v0.1.0: Send emails from your terminal using a very simple SMTP client."
@@ -15,6 +15,7 @@ usage() {
 	echo ""
 	echo "Commands:"
 	echo "  send		runs the send email interface, default"
+	echo "  read		runs the read email CLI"
 	echo "  config		runs the configuration script, also on first run"
 	echo "  help		show this help"
 	echo ""
@@ -30,7 +31,7 @@ usage() {
 show_version() {
 	echo "smail 0.1.0"
 	echo "Copyright (C) 2020 Brian Mayer."
-	#echo "License MIT: MIT License <https://opensource.org/licenses/MIT>"
+	echo "License MIT: MIT License <https://opensource.org/licenses/MIT>"
 	echo "THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,"
 	echo "EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF"
 	echo "MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT."
@@ -43,31 +44,31 @@ goodbye() {
 	case $state in
 		1|2|3|6|7|8)
 			[ -e "$debug" ] || echo "Sending quit command"
-			echo rset > .in
-			echo quit > .in
+			echo rset > .rcvsmtp
+			echo quit > .rcvsmtp
 			;;
 		4|5)
 			[ -e "$debug" ] || echo "Dropping and sending quit command"
-			echo "" > .in
-			echo rset > .in
-			echo quit > .in
+			echo "" > .rcvsmtp
+			echo rset > .rcvsmtp
+			echo quit > .rcvsmtp
 			;;
 		9)
 			[ -e "$debug" ] || echo "Erasing .temp and sending quit command"
 			rm .temp
-			echo rset > .in
-			echo quit > .in
+			echo rset > .rcvsmtp
+			echo quit > .rcvsmtp
 			exit 3
 			;;
 		10)
-			echo quit > .in
+			echo quit > .rcvsmtp
 			;;
 		*)
 			exit 2
 			;;
 	esac
 
-	rm .in .out
+	rm .rcvsmtp .txsmtp
 	exit 0
 }
 
@@ -87,6 +88,10 @@ read_opts() {
 				exit 0
 				;;
 			"send")
+				op="send"
+				;;
+			"read")
+				op="read"
 				;;
 			"config")
 				configure
@@ -96,7 +101,7 @@ read_opts() {
 				break
 				;;
 			*)
-				echo Unrecognized option
+				echo "Unrecognized option $arg"
 				usage
 				exit 1
 				;;
@@ -125,15 +130,15 @@ configure() {
 	echo Done
 }
 
-connect() {
+connect_smtp() {
 	openssl s_client -quiet \
 		-starttls smtp \
 		-connect smtp.gmail.com:587 \
-		-crlf < .in > .out 2> /dev/null &
+		-crlf < .rcvsmtp > .txsmtp 2> /dev/null &
 	state=1
 
 	[ -e $debug ] || echo "Sending client hello"
-	echo ehlo smtp.gmail.com > .in
+	echo ehlo smtp.gmail.com > .txsmtp
 	state=2
 }
 
@@ -225,44 +230,44 @@ retry() {
 	case $state in
 		2)
 			[ -e $debug ] || echo "Reconnecting..."
-			echo ehlo smtp.gmail.com > .in
+			echo ehlo smtp.gmail.com > .txsmtp
 			;;
 		3)
 			[ -e $debug ] || echo "Logging in again..."
-			echo auth login > .in
+			echo auth login > .txsmtp
 			;;
 		4)
 			[ -e $debug ] || echo "Resending email"
-			echo "$email" > .in
+			echo "$email" > .txsmtp
 			;;
 		5)
 			[ -e $debug ] || echo "Resending password"
-			echo "$password" > .in
+			echo "$password" > .txsmtp
 			;;
 		6)
 			[ -e $debug ] || echo "Resending mail command"
-			echo 'mail from: <'"$emaildec"'>' > .in
+			echo 'mail from: <'"$emaildec"'>' > .txsmtp
 			;;
 		7)
 			[ -e $debug ] || echo "Resending recipient"
-			echo rcpt to: '<'"$to"'>' > .in
+			echo rcpt to: '<'"$to"'>' > .txsmtp
 			;;
 		8)
 			[ -e $debug ] || echo "Resending data command"
-			echo data > .in
+			echo data > .txsmtp
 			;;
 		9)
 			[ -e $debug ] || echo "Resending data"
-			cat .temp > .in
-			echo '.' > .in
+			cat .temp > .txsmtp
+			echo '.' > .txsmtp
 			;;
 	esac
 }
 
-send() {
+loop_smtp() {
 	while :
 	do
-		read -r msg < .out
+		read -r msg < .rcvsmtp
 		[ -e $debug ] || echo "received: $msg"
 		case $msg in
 			"221 2.0.0"*)
@@ -275,25 +280,25 @@ send() {
 			"250 SMTPUTF8"*)
 				[ -e $debug ] || echo logging in
 				state=3
-				echo auth login > .in
+				echo auth login > .txsmtp
 				;;
 
 			"334 VXNlcm5hbWU6"*)
 				[ -e $debug ] || echo sending email
 				state=4
-				echo "$email" > .in
+				echo "$email" > .txsmtp
 				;;
 
 			"334 UGFzc3dvcmQ6"*)
 				[ -e $debug ] || echo sending password
 				state=5
-				echo "$password" > .in
+				echo "$password" > .txsmtp
 				;;
 
 			"235 2.7.0"*)
 				[ -e $debug ] || { echo logged in; echo "$emaildec"; }
 				state=6
-				echo 'mail from: <'"$emaildec"'>' > .in
+				echo 'mail from: <'"$emaildec"'>' > .txsmtp
 				;;
 
 			"250 2.0.0"*)
@@ -305,7 +310,7 @@ send() {
 			"250 2.1.0"*)
 				[ -e "$debug" ] || get_rcpt "$n"
 				state=7
-				echo rcpt to: '<'"$(get_rcpt $n)"'>' > .in
+				echo rcpt to: '<'"$(get_rcpt $n)"'>' > .txsmtp
 				n=$((n - 1))
 				;;
 
@@ -313,19 +318,19 @@ send() {
 				if [ ! $n = 0 ]
 				then
 					[ -e $debug ] || get_rcpt "$n"
-					echo rcpt to: '<'"$(get_rcpt $n)"'>' > .in
+					echo rcpt to: '<'"$(get_rcpt $n)"'>' > .txsmtp
 					n=$((n - 1))
 				else
 					[ -e $debug ] || echo data
 					state=8
-					echo data > .in
+					echo data > .txsmtp
 				fi
 				;;
 
 			"354  Go ahead"*)
 				state=9
-				cat .temp > .in
-				echo '.' > .in
+				cat .temp > .txsmtp
+				echo '.' > .txsmtp
 				;;
 
 			"451 4.4.2 Timeout"*)
@@ -372,6 +377,166 @@ send() {
 	done
 }
 
+inc_seq() {
+	seq="$(printf '%03d' $((seq+1)))"
+}
+
+connect_imap() {
+	[ -e $debug ] || echo "Connecting to IMAP"
+	( openssl s_client -quiet -connect imap.gmail.com:993 -crlf < .tximap > .rcvimap 2> /dev/null ) &
+	sleep 2
+	state=1
+	inc_seq
+}
+
+auth_imap() {
+	[ -e $debug ] || echo "Authenticating"
+	[ -e $debug ] || echo "Sending: a$seq login $emaildec $passworddec"
+	echo "a$seq login $emaildec $passworddec" > .tximap
+	state=1
+
+	[ -e $debug ] || echo reading
+	while read -r msg
+	do
+		[ -e $debug ] || echo "received: $msg"
+		case "$msg" in
+			"a$seq OK"*)
+				state=2
+				break
+				;;
+			"a$seq BAD LOGIN"*)
+				state=-1
+				break
+				;;
+		esac
+	done < .rcvimap
+	inc_seq
+}
+
+select_inbox() {
+	[ -e $debug ] || echo "Selecting inbox"
+	[ -e $debug ] || echo "Sending: a$seq select inbox"
+	echo "a$seq select inbox" > .tximap
+
+	[ -e $debug ] || echo reading
+	while read -r msg
+	do
+		[ -e $debug ] || echo "received: $msg"
+		case "$msg" in
+			"a$seq OK"*)
+				state=3
+				break
+				;;
+			"a$seq BAD"*)
+				break
+				;;
+		esac
+	done < .rcvimap
+	inc_seq
+}
+
+fetch_unread() {
+	[ -e $debug ] || echo "Fetching unread mail"
+	[ -e $debug ] || echo "Sending: a$seq SEARCH ALL UNSEEN"
+	echo "a$seq search unread" > .tximap
+}
+
+read_command() {
+	echo "Type command:"
+	select comm in search fetch quit
+	do
+
+		case "$comm" in
+			"search")
+				echo "Type search:"
+				read -r search
+				[ -e $debug ] || echo "Sending: a$seq search $search"
+				echo "a$seq search $search" > .tximap
+				break
+				;;
+			"quit")
+				return
+				;;
+			*)
+				echo "Not an option, type quit to quit"
+				;;
+		esac
+	done
+
+	while read -r msg
+	do
+		[ -e $debug ] || echo "received: $msg"
+		case "$msg" in
+			'* SEARCH'*)
+				res="${msg:9}"
+				;;
+			"a$seq OK"*)
+				break
+				;;
+			"a$seq BAD"*)
+				break
+				;;
+		esac
+	done < .rcvimap
+	inc_seq
+
+	[ -e $debug ] || echo "Getting individual mails"
+	for mail in $res
+	do
+		[ -e $debug ] || echo "Sending: a$seq fetch $mail BODY[TEXT]"
+		echo "a$seq fetch $mail BODY" > .tximap
+		while read -r msg
+		do
+			[ -e $debug ] || echo "received: $msg"
+			case "$msg" in
+					"a$seq OK"*)
+					break
+					;;
+				"a$seq BAD"*)
+					break
+					;;
+			esac
+		done < .rcvimap
+		inc_seq
+	done
+}
+
+loop_imap() {
+	while :
+	do
+		echo "In state $state"
+		case $state in
+			0)
+				connect_imap
+				;;
+			1)
+				auth_imap
+				;;
+			2)
+				select_inbox
+				;;
+			3)
+				read_command
+				;;
+			-1)
+				echo "Error logging in, try again later"
+				break
+				;;
+			*)
+				[ -e $debug ] || echo "Unrecognized message"
+				;;
+		esac
+	done
+}
+
+retry_imap() {
+	case "$state" in
+		2)
+			select_inbox
+			;;
+	esac
+}
+
 # Read arguments
 configfile="$HOME/.config/smail/smail.conf"
 read_opts "$@"
@@ -379,18 +544,29 @@ read_opts "$@"
 # Configuration step
 [ -e "$configfile" ] || configure
 
-email=$(grep email "$configfile" | cut -d '=' -f 2)
+email=$(grep email "$configfile" | cut -d '=' -f 2,3)
 emaildec=$(echo "$email" | base64 -d)
-password=$(grep password "$configfile" | cut -d '=' -f 2)
+password=$(grep password "$configfile" | cut -d '=' -f 2,3)
+passworddec=$(echo "$password" | base64 -d)
 editor=$(grep editor "$configfile" | cut -d '=' -f 2)
 
-[ -p .in ] || mkfifo .in;
-[ -p .out ] || mkfifo .out;
+[ -p .rcvsmtp ] || mkfifo .rcvsmtp;
+[ -p .txsmtp ] || mkfifo .txsmtp;
+[ -p .rcvimap ] || mkfifo .rcvimap;
+[ -p .tximap ] || mkfifo .tximap;
 
 state=0
 
-compose
-connect
-send
-goodbye
+case "$op" in 
+	"send")
+		connect_smtp
+		loop_smtp
+		;;
+
+	"read") 
+		loop_imap
+	;;
+esac
+
+#goodbye
 
