@@ -8,13 +8,15 @@
 ## Requirements
 
 - a shell, I used zsh
-- telnet, on my Mac I used brew to install it
 - openssl
+
+For gmail you'l need to create app passwords, and use them on the
+configuration step.
 
 
 ## Installing
 
-Run `make install`.
+Run `make check` and if you see no errors proceed with `make install`.
 
 
 ## Configuring
@@ -25,8 +27,19 @@ needed.
 
 ## Using
 
+Smail can be used to read and send email from your terminal.
+
+
+### Sending
+
 Run `smail`, it will prompt the needed information, like recipients,
 subject and the body and/or attachments.
+
+
+### Reading
+
+Run `smail read`, in this mode smail is an interactive CLI. It will give
+you commands for listing and manipulating email.
 
 
 ## Providers
