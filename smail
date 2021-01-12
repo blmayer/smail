@@ -377,16 +377,18 @@ loop_smtp() {
 	done
 }
 
+### ---- IMAP Stuff ------------------------------------------------ ###
+
 inc_seq() {
 	seq="$(printf '%03d' $((seq+1)))"
 }
 
 connect_imap() {
-	[ -e $debug ] || echo "Connecting to IMAP"
-	( openssl s_client -quiet -connect imap.gmail.com:993 -crlf < .tximap > .rcvimap 2> /dev/null ) &
-	sleep 2
+	openssl s_client -quiet -connect imap.gmail.com:993 \
+		-crlf < .tximap > .rcvimap 2> /dev/null &
+	conn=$!
 	state=1
-	inc_seq
+	seq=001
 }
 
 auth_imap() {
@@ -411,6 +413,39 @@ auth_imap() {
 		esac
 	done < .rcvimap
 	inc_seq
+}
+
+loop_imap() {
+	while :
+	do
+		echo "In state $state"
+		case $state in
+			1)
+				auth_imap
+				;;
+			2)
+				select_inbox
+				;;
+			3)
+				read_command
+				;;
+			-1)
+				echo "Error logging in, try again later"
+				break
+				;;
+			*)
+				[ -e $debug ] || echo "Unrecognized message"
+				;;
+		esac
+	done
+}
+
+retry_imap() {
+	case "$state" in
+		2)
+			select_inbox
+			;;
+	esac
 }
 
 select_inbox() {
@@ -443,26 +478,28 @@ fetch_unread() {
 
 read_command() {
 	echo "Type command:"
-	select comm in search fetch quit
-	do
+	echo "1) search"
+	echo "2) fetch"
+	echo "3) quit"
 
-		case "$comm" in
-			"search")
-				echo "Type search:"
-				read -r search
-				[ -e $debug ] || echo "Sending: a$seq search $search"
-				echo "a$seq search $search" > .tximap
-				break
-				;;
-			"quit")
-				return
-				;;
-			*)
-				echo "Not an option, type quit to quit"
-				;;
-		esac
-	done
+	read -r comm
+	case "$comm" in
+		"1" | "search")
+			echo "Type search:"
+			read -r search
+			[ -e $debug ] || echo "Sending: a$seq search $search"
+			echo "a$seq search $search" > .tximap
+			;;
+		"3" | "quit")
+			echo "$seq LOGOUT" > .tximap
+			return
+			;;
+		*)
+			echo "Not an option, type quit to quit"
+			;;
+	esac
 
+	echo "reading"
 	while read -r msg
 	do
 		[ -e $debug ] || echo "received: $msg"
@@ -501,41 +538,6 @@ read_command() {
 	done
 }
 
-loop_imap() {
-	while :
-	do
-		echo "In state $state"
-		case $state in
-			0)
-				connect_imap
-				;;
-			1)
-				auth_imap
-				;;
-			2)
-				select_inbox
-				;;
-			3)
-				read_command
-				;;
-			-1)
-				echo "Error logging in, try again later"
-				break
-				;;
-			*)
-				[ -e $debug ] || echo "Unrecognized message"
-				;;
-		esac
-	done
-}
-
-retry_imap() {
-	case "$state" in
-		2)
-			select_inbox
-			;;
-	esac
-}
 
 # Read arguments
 configfile="$HOME/.config/smail/smail.conf"
@@ -564,7 +566,9 @@ case "$op" in
 		;;
 
 	"read") 
+		connect_imap
 		loop_imap
+		kill "$conn"
 	;;
 esac
 
