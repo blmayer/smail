@@ -380,7 +380,7 @@ loop_smtp() {
 ### ---- IMAP Stuff ------------------------------------------------ ###
 
 inc_seq() {
-	seq="$(printf '%03d' $((seq+1)))"
+	seq="$(printf '%d' $((seq+1)))"
 }
 
 connect_imap() {
@@ -388,7 +388,7 @@ connect_imap() {
 		-crlf < .tximap > .rcvimap 2> /dev/null &
 	conn=$!
 	state=1
-	seq=001
+	seq=1
 }
 
 auth_imap() {
@@ -418,7 +418,7 @@ auth_imap() {
 loop_imap() {
 	while :
 	do
-		echo "In state $state"
+		[ -e $debug ] || echo "In state $state"
 		case $state in
 			1)
 				auth_imap
@@ -427,14 +427,20 @@ loop_imap() {
 				select_inbox
 				;;
 			3)
+				fetch_unseen
+				;;
+			4)
 				read_command
+				;;
+			5)
+				break
 				;;
 			-1)
 				echo "Error logging in, try again later"
 				break
 				;;
 			*)
-				[ -e $debug ] || echo "Unrecognized message"
+				[ -e $debug ] || echo "Unrecognized state"
 				;;
 		esac
 	done
@@ -470,10 +476,68 @@ select_inbox() {
 	inc_seq
 }
 
-fetch_unread() {
+# TODO: parse from header
+
+print_headers() {
+	while read -r msg
+	do
+		[ -e $debug ] || echo "received: $msg"
+		case "$msg" in
+		"a$seq OK"*)
+			break
+			;;
+		'From:'*)
+			from="${msg:6}"
+			;;
+		'Date:'*)
+			date="${msg:6}"
+			;;
+		'Subject:'*)
+			subj="${msg:9}"
+			;;
+		"a$seq BAD"*)
+			break
+			;;
+		esac
+	done < .rcvimap
+
+	echo "read"
+	# echo "$from"	"$date"	"$subj"
+}
+
+fetch_unseen() {
 	[ -e $debug ] || echo "Fetching unread mail"
 	[ -e $debug ] || echo "Sending: a$seq SEARCH ALL UNSEEN"
-	echo "a$seq search unread" > .tximap
+	echo "a$seq search unseen" > .tximap
+
+	# Read response
+	[ -e $debug ] || echo "Reading response"
+	while read -r msg
+	do
+		[ -e $debug ] || echo "received: $msg"
+		case "$msg" in
+			'* SEARCH'*)
+				res="${msg:9}"
+				;;
+			"a$seq OK"*)
+				break
+				;;
+			"a$seq BAD"*)
+				return
+				;;
+		esac
+	done < .rcvimap
+
+	# Parsing response
+	[ -e $debug ] || echo "Getting individual mails"
+	for mail in $res
+	do
+		[ -e $debug ] || echo "Sending: a$seq fetch $mail BODY.PEEK[HEADER]"
+		echo "a$seq fetch $mail BODY.PEEK[HEADER]" > .tximap
+		print_headers
+		inc_seq
+	done
+	state=4
 }
 
 read_command() {
@@ -492,7 +556,7 @@ read_command() {
 			;;
 		"3" | "quit")
 			echo "$seq LOGOUT" > .tximap
-			return
+			state=5
 			;;
 		*)
 			echo "Not an option, type quit to quit"
@@ -503,39 +567,28 @@ read_command() {
 	while read -r msg
 	do
 		[ -e $debug ] || echo "received: $msg"
-		case "$msg" in
-			'* SEARCH'*)
-				res="${msg:9}"
-				;;
-			"a$seq OK"*)
-				break
-				;;
-			"a$seq BAD"*)
-				break
-				;;
-		esac
 	done < .rcvimap
 	inc_seq
 
-	[ -e $debug ] || echo "Getting individual mails"
-	for mail in $res
-	do
-		[ -e $debug ] || echo "Sending: a$seq fetch $mail BODY[TEXT]"
-		echo "a$seq fetch $mail BODY" > .tximap
-		while read -r msg
-		do
-			[ -e $debug ] || echo "received: $msg"
-			case "$msg" in
-					"a$seq OK"*)
-					break
-					;;
-				"a$seq BAD"*)
-					break
-					;;
-			esac
-		done < .rcvimap
-		inc_seq
-	done
+	# [ -e $debug ] || echo "Getting individual mails"
+	# for mail in $res
+	# do
+	# 	[ -e $debug ] || echo "Sending: a$seq fetch $mail BODY[TEXT]"
+	# 	echo "a$seq fetch $mail BODY" > .tximap
+	# 	while read -r msg
+	# 	do
+	# 		[ -e $debug ] || echo "received: $msg"
+	# 		case "$msg" in
+	# 				"a$seq OK"*)
+	# 				break
+	# 				;;
+	# 			"a$seq BAD"*)
+	# 				break
+	# 				;;
+	# 		esac
+	# 	done < .rcvimap
+	# 	inc_seq
+	# done
 }
 
 
