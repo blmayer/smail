@@ -379,9 +379,13 @@ loop_smtp() {
 
 ### ---- IMAP Stuff ------------------------------------------------ ###
 
-inc_seq() {
+send_imap() {
 	seq="$(printf '%d' $((seq+1)))"
+
+	[ -e $debug ] || echo "Sending: a$seq $@"
+	echo "a$seq $@" > .tximap
 }
+
 
 connect_imap() {
 	openssl s_client -quiet -connect imap.gmail.com:993 \
@@ -393,8 +397,7 @@ connect_imap() {
 
 auth_imap() {
 	[ -e $debug ] || echo "Authenticating"
-	[ -e $debug ] || echo "Sending: a$seq login $emaildec $passworddec"
-	echo "a$seq login $emaildec $passworddec" > .tximap
+	send_imap "login $emaildec $passworddec"
 	state=1
 
 	[ -e $debug ] || echo reading
@@ -412,7 +415,6 @@ auth_imap() {
 				;;
 		esac
 	done < .rcvimap
-	inc_seq
 }
 
 loop_imap() {
@@ -456,8 +458,7 @@ retry_imap() {
 
 select_inbox() {
 	[ -e $debug ] || echo "Selecting inbox"
-	[ -e $debug ] || echo "Sending: a$seq select inbox"
-	echo "a$seq select inbox" > .tximap
+	send_imap "select inbox"
 
 	[ -e $debug ] || echo reading
 	while read -r msg
@@ -473,7 +474,6 @@ select_inbox() {
 				;;
 		esac
 	done < .rcvimap
-	inc_seq
 }
 
 # TODO: parse from header
@@ -507,8 +507,7 @@ print_headers() {
 
 fetch_unseen() {
 	[ -e $debug ] || echo "Fetching unread mail"
-	[ -e $debug ] || echo "Sending: a$seq SEARCH ALL UNSEEN"
-	echo "a$seq search unseen" > .tximap
+	send_imap "search unseen"
 
 	# Read response
 	[ -e $debug ] || echo "Reading response"
@@ -532,10 +531,8 @@ fetch_unseen() {
 	[ -e $debug ] || echo "Getting individual mails"
 	for mail in $res
 	do
-		[ -e $debug ] || echo "Sending: a$seq fetch $mail BODY.PEEK[HEADER]"
-		echo "a$seq fetch $mail BODY.PEEK[HEADER]" > .tximap
+		send_imap "fetch $mail BODY.PEEK[HEADER]"
 		print_headers
-		inc_seq
 	done
 	state=4
 }
@@ -551,11 +548,10 @@ read_command() {
 		"1" | "search")
 			echo "Type search:"
 			read -r search
-			[ -e $debug ] || echo "Sending: a$seq search $search"
-			echo "a$seq search $search" > .tximap
+			send_imap "search $search"
 			;;
 		"3" | "quit")
-			echo "$seq LOGOUT" > .tximap
+			send_imap "LOGOUT"
 			state=5
 			;;
 		*)
@@ -568,7 +564,6 @@ read_command() {
 	do
 		[ -e $debug ] || echo "received: $msg"
 	done < .rcvimap
-	inc_seq
 
 	# [ -e $debug ] || echo "Getting individual mails"
 	# for mail in $res
@@ -626,4 +621,3 @@ case "$op" in
 esac
 
 #goodbye
-
