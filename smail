@@ -477,7 +477,7 @@ select_inbox() {
 }
 
 decode_utf8() {
-	sed -e 's/=?utf-8?Q?//g' -e 's/?=//g' \
+	sed -e 's/.*=?[uU][tT][fF]-8?[Qq]?//g' -e 's/?=//g' \
 	-e 's/=F0=9F=8F=AD=C2=A0/🏭/g' \
 	-e 's/=C2=A0=F0=9F=91=87/👇/g' \
 	-e 's/=e2=80=93/-/g' \
@@ -486,6 +486,7 @@ decode_utf8() {
 	-e 's/=C3=B5/õ/g' \
 	-e 's/=C3=B4/ô/g' \
 	-e 's/=C3=B3/ó/g' \
+	-e 's/=C3=AD/í/g' \
 	-e 's/=C3=A9/é/g' \
 	-e 's/=C3=A7/ç/g' \
 	-e 's/=C3=A3/ã/g' \
@@ -500,7 +501,8 @@ decode_utf8() {
 	-e 's/=29/)/g' \
 	-e 's/=28/(/g' \
 	-e 's/=21/!/g' \
-	-e 's/=20/ /g' <<< "$@"
+	-e 's/=20/ /g' \
+	-e 's/\\r//g's <<< "$@"
 }
 
 print_headers() {
@@ -526,12 +528,12 @@ print_headers() {
 		esac
 	done < .rcvimap
 
-	echo "From:	$(decode_utf8 $from)"
-	echo "On:	$date"
-	echo "Subj:	$(decode_utf8 $subj)"
-	echo "Id:	$1"
-	echo ""
-	echo "---------------------------------------------------------"
+	from="$(sed 's/ <.*>//' <<< "$from")"
+	from="$(decode_utf8 $from)"
+	date="${date:0:25}"
+	subj="$(decode_utf8 $subj)"
+	
+	echo "$1\t$date\t\t$from\t\t$subj"
 }
 
 fetch_unseen() {
@@ -558,6 +560,7 @@ fetch_unseen() {
 
 	# Parsing response
 	[ -e $debug ] || echo "Getting individual mails"
+	echo "id		date received		from			subject"
 	for mail in $res
 	do
 		[ -e $debug ] || echo "Sending: a$seq fetch $mail BODY.PEEK[HEADER]"
