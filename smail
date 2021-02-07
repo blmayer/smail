@@ -390,7 +390,6 @@ send_imap() {
 connect_imap() {
 	openssl s_client -quiet -connect imap.gmail.com:993 \
 		-crlf < .tximap > .rcvimap 2> /dev/null &
-	conn=$!
 	state=1
 	seq=1
 }
@@ -649,7 +648,6 @@ case "$op" in
 	"read" | "") 
 		connect_imap
 		loop_imap
-		kill "$conn"
 	;;
 esac
 
