@@ -646,7 +646,7 @@ case "$op" in
 		loop_smtp
 		;;
 
-	"read") 
+	"read" | "") 
 		connect_imap
 		loop_imap
 		kill "$conn"
