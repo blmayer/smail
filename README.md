@@ -9,6 +9,9 @@
 
 - a shell, I used zsh
 - openssl
+- sed
+- cat
+- a text editor like vim or nano
 
 For gmail you'l need to create app passwords, and use them on the
 configuration step.
