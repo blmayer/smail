@@ -3,7 +3,7 @@
 #trap goodbye INT HUP
 
 usage() {
-	echo "Smail v0.1.0: Send emails from your terminal using a very simple SMTP client."
+	echo "Smail v0.1.0: Send or read emails from your terminal."
 	echo ""
 	echo "Usage: smail [options] [command]"
 	echo ""
@@ -14,14 +14,14 @@ usage() {
 	echo "  --version	show version info"
 	echo ""
 	echo "Commands:"
-	echo "  send		runs the send email interface, default"
-	echo "  read		runs the read email CLI"
+	echo "  send		runs the send email interface"
+	echo "  read		runs the read email CLI, default"
 	echo "  config		runs the configuration script, also on first run"
 	echo "  help		show this help"
 	echo ""
 	echo "Examples:"
 	echo "  smail config	Run the configuration script"
-	echo "  smail		Send an email"
+	echo "  smail		Read emails"
 	echo ""
 	echo "Report bugs to: bleemayer@gmail.com"
 	echo "Home page: <https://www.github.com/blmayer/smail/>"
