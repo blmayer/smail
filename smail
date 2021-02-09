@@ -382,8 +382,8 @@ loop_smtp() {
 send_imap() {
 	seq="$(printf '%d' $((seq+1)))"
 
-	[ -e $debug ] || echo "Sending: a$seq $@"
-	echo "a$seq $@" > .tximap
+	[ -e $debug ] || echo "Sending: a$seq $*"
+	echo "a$seq $*" > .tximap
 }
 
 
@@ -476,7 +476,9 @@ select_inbox() {
 }
 
 decode_utf8() {
-	sed -e 's/.*=?[uU][tT][fF]-8?[Qq]?//g' -e 's/?=//g' \
+	# shellcheck disable=SC1112
+	echo "$@" | sed -e 's/.*=?[uU][tT][fF]-8?[Qq]?//g' \
+	-e 's/?=//g' \
 	-e 's/=F0=9F=8F=AD=C2=A0/🏭/g' \
 	-e 's/=C2=A0=F0=9F=91=87/👇/g' \
 	-e 's/=e2=80=93/-/g' \
@@ -501,7 +503,7 @@ decode_utf8() {
 	-e 's/=28/(/g' \
 	-e 's/=21/!/g' \
 	-e 's/=20/ /g' \
-	-e 's/\\r//g's <<< "$@"
+	-e 's/\\r//g'
 }
 
 print_headers() {
@@ -513,13 +515,13 @@ print_headers() {
 			break
 			;;
 		'From:'*)
-			from="${msg:6}"
+			from="$(echo "$msg" | cut -d ' ' -d 2)"
 			;;
 		'Date:'*)
-			date="${msg:6}"
+			date="$(echo "$msg" | cut -d ' ' -d 2)"
 			;;
 		'Subject:'*)
-			subj="${msg:9}"
+			subj="$(echo "$msg" | cut -d ' ' -d 2)"
 			;;
 		"a$seq BAD"*)
 			break
@@ -527,12 +529,12 @@ print_headers() {
 		esac
 	done < .rcvimap
 
-	from="$(sed 's/ <.*>//' <<< "$from")"
-	from="$(decode_utf8 $from)"
-	date="${date:0:25}"
-	subj="$(decode_utf8 $subj)"
+	from="$(echo "$from" | sed 's/ <.*>//')"
+	from="$(decode_utf8 "$from")"
+	date="$(echo "$date" | cut -d ' ' -d 1-2)"
+	subj="$(decode_utf8 "$subj")"
 	
-	echo "$1\t$date\t\t$from\t\t$subj"
+	printf "%s\t%s\t\t%s\t\t%s" "$1" "$date" "$from" "$subj"
 }
 
 fetch_unseen() {
@@ -546,7 +548,7 @@ fetch_unseen() {
 		[ -e $debug ] || echo "received: $msg"
 		case "$msg" in
 			'* SEARCH'*)
-				res="${msg:9}"
+				res="$(echo "$msg" | cut -d ' ' -d 2-)"
 				;;
 			"a$seq OK"*)
 				break
