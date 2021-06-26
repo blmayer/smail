@@ -1,6 +1,4 @@
-#!/bin/sh
-
-#trap goodbye INT HUP
+#!/bin/bash
 
 usage() {
 	echo "Smail v0.1.0: Send or read emails from your terminal."
@@ -37,39 +35,6 @@ show_version() {
 	echo "MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT."
 	echo ""
 	echo "Written by Brian Lee Mayer."
-}
-
-goodbye() {
-	[ -e "$debug" ] || echo Quitting
-	case $state in
-		1|2|3|6|7|8)
-			[ -e "$debug" ] || echo "Sending quit command"
-			echo rset > .rcvsmtp
-			echo quit > .rcvsmtp
-			;;
-		4|5)
-			[ -e "$debug" ] || echo "Dropping and sending quit command"
-			echo "" > .rcvsmtp
-			echo rset > .rcvsmtp
-			echo quit > .rcvsmtp
-			;;
-		9)
-			[ -e "$debug" ] || echo "Erasing .temp and sending quit command"
-			rm .temp
-			echo rset > .rcvsmtp
-			echo quit > .rcvsmtp
-			exit 3
-			;;
-		10)
-			echo quit > .rcvsmtp
-			;;
-		*)
-			exit 2
-			;;
-	esac
-
-	rm .rcvsmtp .txsmtp
-	exit 0
 }
 
 read_opts() {
@@ -128,18 +93,6 @@ configure() {
 	read -re editor
 	echo "editor=${editor:-vi}" >> "$configfile"
 	echo Done
-}
-
-connect_smtp() {
-	openssl s_client -quiet \
-		-starttls smtp \
-		-connect smtp.gmail.com:587 \
-		-crlf < .rcvsmtp > .txsmtp 2> /dev/null &
-	state=1
-
-	[ -e $debug ] || echo "Sending client hello"
-	echo ehlo smtp.gmail.com > .txsmtp
-	state=2
 }
 
 add_attachments() {
@@ -225,49 +178,18 @@ compose() {
 	echo "--$boundary--" >> .temp
 }
 
-retry() {
-	echo Retrying...
-	case $state in
-		2)
-			[ -e $debug ] || echo "Reconnecting..."
-			echo ehlo smtp.gmail.com > .txsmtp
-			;;
-		3)
-			[ -e $debug ] || echo "Logging in again..."
-			echo auth login > .txsmtp
-			;;
-		4)
-			[ -e $debug ] || echo "Resending email"
-			echo "$email" > .txsmtp
-			;;
-		5)
-			[ -e $debug ] || echo "Resending password"
-			echo "$password" > .txsmtp
-			;;
-		6)
-			[ -e $debug ] || echo "Resending mail command"
-			echo 'mail from: <'"$emaildec"'>' > .txsmtp
-			;;
-		7)
-			[ -e $debug ] || echo "Resending recipient"
-			echo rcpt to: '<'"$to"'>' > .txsmtp
-			;;
-		8)
-			[ -e $debug ] || echo "Resending data command"
-			echo data > .txsmtp
-			;;
-		9)
-			[ -e $debug ] || echo "Resending data"
-			cat .temp > .txsmtp
-			echo '.' > .txsmtp
-			;;
-	esac
-}
-
 loop_smtp() {
-	while :
+	case "$state" in
+	0)
+		[ -e $debug ] || echo "logging in"
+		echo "ehlo smtp.gmail.com" > ${SMTP[1]}
+		state=1
+		;;
+	esac
+
+	[ -e $debug ] || echo "listening"
+	while read -r -u ${SMTP[0]} msg
 	do
-		read -r msg < .rcvsmtp
 		[ -e $debug ] || echo "received: $msg"
 		case $msg in
 			"221 2.0.0"*)
@@ -280,25 +202,25 @@ loop_smtp() {
 			"250 SMTPUTF8"*)
 				[ -e $debug ] || echo logging in
 				state=3
-				echo auth login > .txsmtp
+				echo auth login > ${SMTP[1]}
 				;;
 
 			"334 VXNlcm5hbWU6"*)
 				[ -e $debug ] || echo sending email
 				state=4
-				echo "$email" > .txsmtp
+				echo "$email" > ${SMTP[1]}
 				;;
 
 			"334 UGFzc3dvcmQ6"*)
 				[ -e $debug ] || echo sending password
 				state=5
-				echo "$password" > .txsmtp
+				echo "$password" > ${SMTP[1]}
 				;;
 
 			"235 2.7.0"*)
 				[ -e $debug ] || { echo logged in; echo "$emaildec"; }
 				state=6
-				echo 'mail from: <'"$emaildec"'>' > .txsmtp
+				echo 'mail from: <'"$emaildec"'>' > ${SMTP[1]}
 				;;
 
 			"250 2.0.0"*)
@@ -310,7 +232,7 @@ loop_smtp() {
 			"250 2.1.0"*)
 				[ -e "$debug" ] || get_rcpt "$n"
 				state=7
-				echo rcpt to: '<'"$(get_rcpt $n)"'>' > .txsmtp
+				echo rcpt to: '<'"$(get_rcpt $n)"'>' > ${SMTP[1]}
 				n=$((n - 1))
 				;;
 
@@ -318,19 +240,19 @@ loop_smtp() {
 				if [ ! $n = 0 ]
 				then
 					[ -e $debug ] || get_rcpt "$n"
-					echo rcpt to: '<'"$(get_rcpt $n)"'>' > .txsmtp
+					echo rcpt to: '<'"$(get_rcpt $n)"'>' > ${SMTP[1]}
 					n=$((n - 1))
 				else
 					[ -e $debug ] || echo data
 					state=8
-					echo data > .txsmtp
+					echo data > SMTP[0]
 				fi
 				;;
 
 			"354  Go ahead"*)
 				state=9
-				cat .temp > .txsmtp
-				echo '.' > .txsmtp
+				cat .temp > SMTP[0]
+				echo '.' > SMTP[0]
 				;;
 
 			"451 4.4.2 Timeout"*)
@@ -341,7 +263,7 @@ loop_smtp() {
 			"501 5.5.2 Cannot Decode response"*)
 				state=3
 				retry
-				;;
+		 		;;
 			"502 5.5.1 Unrecognized command"*)
 				retry
 				;;
@@ -366,7 +288,7 @@ loop_smtp() {
 				break
 				;;
 			"555 5.5.2 Syntax error"*)
-				echo FATAL ERROR email not sent
+				echo "FATAL ERROR email not sent"
 				break
 				;;
 			*)
@@ -377,63 +299,229 @@ loop_smtp() {
 	done
 }
 
-### ---- IMAP Stuff ------------------------------------------------ ###
+### ---- IMAP Stuff ------------------------------------------------------ ###
+
+decode_string() {
+	# shellcheck disable=SC1112
+	case "$@" in
+	"=?iso-8859-1?Q?"*)
+		echo "$@" | sed -e 's/=?iso-8859-1?Q?//Ig' \
+		-e 's/?=//g' \
+		-e 's/=E7/ç/g' \
+		-e 's/=E3/ã/g'
+		;;
+	"=?utf-8?q?"* | "=?utf-8?Q?"*)
+		echo "$@" | sed -e 's/.*=?utf-8?q?//Ig' \
+		-e 's/?=//g' \
+		-e 's/=F0=9F=8F=AD=C2=A0/🏭/g' \
+		-e 's/=C2=A0=F0=9F=91=87/👇/g' \
+		-e 's/=e2=80=93/-/g' \
+		-e 's/=E2=80=99/’/g' \
+		-e 's/=C3=BA/ú/g' \
+		-e 's/=C3=B5/õ/g' \
+		-e 's/=C3=B4/ô/g' \
+		-e 's/=C3=B3/ó/g' \
+		-e 's/=C3=AD/í/g' \
+		-e 's/=C3=A9/é/g' \
+		-e 's/=C3=A7/ç/g' \
+		-e 's/=C3=A3/ã/g' \
+		-e 's/=C3=A1/á/g' \
+		-e 's/=C3=A0/à/g' \
+		-e 's/=3F/?/g' \
+		-e 's/=2D/-/g' \
+		-e 's/=2C/,/g' \
+		-e 's/=20/ /g' \
+		-e 's/=20/ /g' \
+		-e 's/=20/ /g' \
+		-e "s/=27/\\'/g" \
+		-e 's/=28/(/g' \
+		-e 's/=29/)/g' \
+		-e 's/=21/!/g' \
+		-e 's/=20/ /g'
+		;;
+	"=?UTF-8?B?"* | "=?utf-8?B?"*)
+		echo "$@" | sed -e 's/=?UTF-8?B?//Ig' \
+		-e 's/?=//g' | base64 -d
+		;;
+	*)
+		echo "$@"
+		;;
+	esac
+}
 
 send_imap() {
 	seq="$(printf '%d' $((seq+1)))"
 
 	[ -e $debug ] || echo "Sending: a$seq $*"
-	echo "a$seq $*" > .tximap
-}
-
-
-connect_imap() {
-	openssl s_client -quiet -connect imap.gmail.com:993 \
-		-crlf < .tximap > .rcvimap 2> /dev/null &
-	state=1
-	seq=1
+	echo "a$seq $*" >&${IMAP[1]}
 }
 
 auth_imap() {
 	[ -e $debug ] || echo "Authenticating"
 	send_imap "login $emaildec $passworddec"
-	state=1
 
-	[ -e $debug ] || echo reading
-	while read -r msg
+	while read -r -u ${IMAP[0]} msg
 	do
 		[ -e $debug ] || echo "received: $msg"
 		case "$msg" in
-			"a$seq OK"*)
-				state=2
-				break
-				;;
-			"a$seq BAD LOGIN"*)
-				state=-1
-				break
-				;;
+		"a$seq OK"*)
+			return 1
+			break
+			;;
+	
+		"a$seq BAD"*)
+			break
+			;;
 		esac
-	done < .rcvimap
+	done
+
+	return 0
 }
 
-loop_imap() {
+select_inbox() {
+	[ -e $debug ] || echo "Selecting inbox"
+	send_imap "select inbox"
+}
+
+get_email() {
+	send_imap "fetch $1 BODY.PEEK[HEADER]"
+
+	while read -r -u ${IMAP[0]} msg
+	do
+		[ -e $debug ] || echo "received: $msg"
+		case "$msg" in
+		"a$seq OK"*)
+			break
+			;;
+		'From:'*)
+			from="$(cut -d ' ' -f 2 <<< "$msg" | tr -d '\r')"
+			;;
+		'Date:'*)
+			date="$(cut -d ' ' -f 2-6 <<< "$msg" | tr -d '\r')"
+			;;
+		'Subject:'*)
+			subj="$(cut -d ' ' -f 2- <<< "$msg" | tr -d '\r')"
+			;;
+		"a$seq BAD"*)
+			break
+			;;
+		esac
+	done
+
+	from="$(echo "$from" | sed 's/ <.*>//')"
+	from="$(decode_string "$from")"
+	date="$(echo "$date" | cut -d ' ' -f 1-6)"
+	subj="$(decode_string "$subj")"
+	
+	printf "%s\t\t%s\t%s\t\t%s" "$1" "$date" "$from" "$subj"
+	echo ""
+}
+
+fetch_unseen() {
+	[ -e $debug ] || echo "Fetching unread mail"
+	send_imap "search unseen"
+
+	# Read response
+	[ -e $debug ] || echo "Reading response"
+	while read -r -u ${IMAP[0]} msg
+	do
+		[ -e $debug ] || echo "received: $msg"
+		case "$msg" in
+			'* SEARCH'*)
+				res="$(cut -d ' ' -f 3- <<< "$msg" | tr -d '\r')"
+				;;
+			"a$seq OK"*)
+				break
+				;;
+			"a$seq BAD"*)
+				return
+				;;
+		esac
+	done
+
+	# Parsing response
+	[ -e $debug ] || echo "Getting individual mails $res"
+	echo "id		date received			from			subject"
+	for mail in $res
+	do
+		[ -e $debug ] || echo "Getting $mail"
+		get_email "$mail"
+	done
+}
+
+read_command() {
+	echo "Type command:"
+	echo "1) search	2) fetch	3) quit"
+
+	read -r comm
+	case "$comm" in
+		"1" | "search")
+			echo "Type search:"
+			read -r search
+			send_imap "search $search"
+			;;
+		"3" | "q" | "quit")
+			send_imap "LOGOUT"
+			exit 0
+			;;
+		*)
+			echo "Not an option, type quit to quit"
+			;;
+	esac
+
+	echo "reading"
+	while read -r -u ${SMTP[1]} msg
+	do
+		[ -e $debug ] || echo "received: $msg"
+	done
+
+	[ -e $debug ] || echo "Getting individual mails"
+	for mail in $res
+	do
+		[ -e $debug ] || echo "Sending: a$seq fetch $mail BODY[TEXT]"
+		echo "a$seq fetch $mail BODY" > ${IMAP[1]}
+		while read -r -u ${IMAP[0]} msg
+		do
+			[ -e $debug ] || echo "received: $msg"
+			case "$msg" in
+					"a$seq OK"*)
+					break
+					;;
+				"a$seq BAD"*)
+					break
+					;;
+			esac
+		done 
+	done
+}
+
+
+function loop_imap() {
+	[ -e $debug ] || >&2 echo "Starting listener"
 	while :
 	do
 		[ -e $debug ] || echo "In state $state"
 		case $state in
+			0)
+				if auth_imap
+				then
+					state=1
+				fi
+				;;
 			1)
-				auth_imap
+				select_inbox
+				state=2
 				;;
 			2)
-				select_inbox
+				fetch_unseen
+				state=3
 				;;
 			3)
-				fetch_unseen
-				;;
-			4)
 				read_command
 				;;
-			5)
+			8)
+				;;
+			9)
 				break
 				;;
 			-1)
@@ -444,182 +532,10 @@ loop_imap() {
 				[ -e $debug ] || echo "Unrecognized state"
 				;;
 		esac
-	done
+	done 
 }
 
-retry_imap() {
-	case "$state" in
-		2)
-			select_inbox
-			;;
-	esac
-}
-
-select_inbox() {
-	[ -e $debug ] || echo "Selecting inbox"
-	send_imap "select inbox"
-
-	[ -e $debug ] || echo reading
-	while read -r msg
-	do
-		[ -e $debug ] || echo "received: $msg"
-		case "$msg" in
-			"a$seq OK"*)
-				state=3
-				break
-				;;
-			"a$seq BAD"*)
-				break
-				;;
-		esac
-	done < .rcvimap
-}
-
-decode_utf8() {
-	# shellcheck disable=SC1112
-	echo "$@" | sed -e 's/.*=?[uU][tT][fF]-8?[Qq]?//g' \
-	-e 's/?=//g' \
-	-e 's/=F0=9F=8F=AD=C2=A0/🏭/g' \
-	-e 's/=C2=A0=F0=9F=91=87/👇/g' \
-	-e 's/=e2=80=93/-/g' \
-	-e 's/=E2=80=99/’/g' \
-	-e 's/=C3=BA/ú/g' \
-	-e 's/=C3=B5/õ/g' \
-	-e 's/=C3=B4/ô/g' \
-	-e 's/=C3=B3/ó/g' \
-	-e 's/=C3=AD/í/g' \
-	-e 's/=C3=A9/é/g' \
-	-e 's/=C3=A7/ç/g' \
-	-e 's/=C3=A3/ã/g' \
-	-e 's/=C3=A1/á/g' \
-	-e 's/=C3=A0/à/g' \
-	-e 's/=3F/?/g' \
-	-e 's/=2D/-/g' \
-	-e 's/=2C/,/g' \
-	-e 's/=20/ /g' \
-	-e 's/=20/ /g' \
-	-e 's/=20/ /g' \
-	-e 's/=29/)/g' \
-	-e 's/=28/(/g' \
-	-e 's/=21/!/g' \
-	-e 's/=20/ /g' \
-	-e 's/\\r//g'
-}
-
-print_headers() {
-	while read -r msg
-	do
-		[ -e $debug ] || echo "received: $msg"
-		case "$msg" in
-		"a$seq OK"*)
-			break
-			;;
-		'From:'*)
-			from="$(echo "$msg" | cut -d ' ' -d 2)"
-			;;
-		'Date:'*)
-			date="$(echo "$msg" | cut -d ' ' -d 2)"
-			;;
-		'Subject:'*)
-			subj="$(echo "$msg" | cut -d ' ' -d 2)"
-			;;
-		"a$seq BAD"*)
-			break
-			;;
-		esac
-	done < .rcvimap
-
-	from="$(echo "$from" | sed 's/ <.*>//')"
-	from="$(decode_utf8 "$from")"
-	date="$(echo "$date" | cut -d ' ' -d 1-2)"
-	subj="$(decode_utf8 "$subj")"
-	
-	printf "%s\t%s\t\t%s\t\t%s" "$1" "$date" "$from" "$subj"
-}
-
-fetch_unseen() {
-	[ -e $debug ] || echo "Fetching unread mail"
-	send_imap "search unseen"
-
-	# Read response
-	[ -e $debug ] || echo "Reading response"
-	while read -r msg
-	do
-		[ -e $debug ] || echo "received: $msg"
-		case "$msg" in
-			'* SEARCH'*)
-				res="$(echo "$msg" | cut -d ' ' -d 2-)"
-				;;
-			"a$seq OK"*)
-				break
-				;;
-			"a$seq BAD"*)
-				return
-				;;
-		esac
-	done < .rcvimap
-
-	# Parsing response
-	[ -e $debug ] || echo "Getting individual mails"
-	echo "id		date received		from			subject"
-	for mail in $res
-	do
-		[ -e $debug ] || echo "Sending: a$seq fetch $mail BODY.PEEK[HEADER]"
-		send_imap "fetch $mail BODY.PEEK[HEADER]"
-		print_headers "$mail"
-	done
-	state=4
-}
-
-read_command() {
-	echo "Type command:"
-	echo "1) search"
-	echo "2) fetch"
-	echo "3) quit"
-
-	read -r comm
-	case "$comm" in
-		"1" | "search")
-			echo "Type search:"
-			read -r search
-			send_imap "search $search"
-			;;
-		"3" | "quit")
-			send_imap "LOGOUT"
-			state=5
-			;;
-		*)
-			echo "Not an option, type quit to quit"
-			;;
-	esac
-
-	echo "reading"
-	while read -r msg
-	do
-		[ -e $debug ] || echo "received: $msg"
-	done < .rcvimap
-
-	# [ -e $debug ] || echo "Getting individual mails"
-	# for mail in $res
-	# do
-	# 	[ -e $debug ] || echo "Sending: a$seq fetch $mail BODY[TEXT]"
-	# 	echo "a$seq fetch $mail BODY" > .tximap
-	# 	while read -r msg
-	# 	do
-	# 		[ -e $debug ] || echo "received: $msg"
-	# 		case "$msg" in
-	# 				"a$seq OK"*)
-	# 				break
-	# 				;;
-	# 			"a$seq BAD"*)
-	# 				break
-	# 				;;
-	# 		esac
-	# 	done < .rcvimap
-	# 	inc_seq
-	# done
-}
-
+### ---- Main program ---------------------------------------------------- ###
 
 # Read arguments
 configfile="$HOME/.config/smail/smail.conf"
@@ -634,23 +550,26 @@ password=$(grep password "$configfile" | cut -d '=' -f 2,3)
 passworddec=$(echo "$password" | base64 -d)
 editor=$(grep editor "$configfile" | cut -d '=' -f 2)
 
-[ -p .rcvsmtp ] || mkfifo .rcvsmtp;
-[ -p .txsmtp ] || mkfifo .txsmtp;
-[ -p .rcvimap ] || mkfifo .rcvimap;
-[ -p .tximap ] || mkfifo .tximap;
-
-state=0
-
 case "$op" in 
 	"send")
-		connect_smtp
+		coproc SMTP {
+			openssl s_client -quiet \
+			-starttls smtp \
+			-connect smtp.gmail.com:587 \
+			-crlf 2> /dev/null
+		}
+		state=0
 		loop_smtp
 		;;
 
-	"read" | "") 
-		connect_imap
+	"read" | "")
+		coproc IMAP {
+			openssl s_client -quiet -connect imap.gmail.com:993 \
+			-crlf 2> /dev/null
+		}
+		state=0
 		loop_imap
-	;;
+		;;
 esac
 
-#goodbye
+goodbye
