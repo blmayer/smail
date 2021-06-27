@@ -40,7 +40,7 @@ show_version() {
 read_opts() {
 	for arg in "$@"
 	do
-		case $arg in
+		case $1 in
 			"-v")
 				debug=1
 				;;
@@ -62,6 +62,22 @@ read_opts() {
 				configure
 				exit 0
 				;;
+			"-t"|"--to")
+				shift
+				to="$1"
+				;;
+			"--cc")
+				shift
+				cc="$1"
+				;;
+			"--cco")
+				shift
+				cco="$1"
+				;;
+			"-s"|"--subject")
+				shift
+				subj="$1"
+				;;
 			"")
 				break
 				;;
@@ -71,6 +87,7 @@ read_opts() {
 				exit 1
 				;;
 		esac
+		shift
 	done
 }
 
@@ -93,6 +110,11 @@ configure() {
 	read -re editor
 	echo "editor=${editor:-vi}" >> "$configfile"
 	echo Done
+}
+
+send_smtp() {
+	[ -e $debug ] || echo "Sending: $*"
+	echo "$*" >&${SMTP[1]}
 }
 
 add_attachments() {
@@ -127,26 +149,31 @@ get_rcpt() {
 }
 
 compose() {
-	echo "Type recipient(s) (comma separated):"
-	read -r to
+	[[ -z "$to" ]] && {
+		echo "Type recipient(s) (comma separated):"
+		read -r to
+
+		echo "Type Cc(s): (comma separated)"
+		read -r cc
+
+		echo "Type Cco(s): (comma separated)"
+		read -r cco
+	}
 
 	echo "To: $to" > .temp
 	echo "From: $emaildec" >> .temp
-
-	echo "Type Cc(s): (comma separated)"
-	read -r cc
 	[ -n "$cc" ] && { echo "Cc: $cc" >> .temp; to="$to,$cc"; }
-
-	echo "Type Cco(s): (comma separated)"
-	read -r cco
 	[ -n "$cco" ] && { echo "Cco: $cco" >> .temp; to="$to,$cco"; }
 
 	# Transform into list for sending later
 	n=$(($(echo "$to" | tr -d -c ',' | wc -c | xargs) + 1))
 
-	echo "Type subject:"
-	read -r subj
+	[[ -z "$subj" ]] && {
+		echo "Type subject:"
+		read -r subj
+	}
 	echo "Subject: $subj" >> .temp
+
 	[ -e $debug ] || echo "Email fields:"
 	[ -e $debug ] || cat .temp
 
@@ -182,7 +209,7 @@ loop_smtp() {
 	case "$state" in
 	0)
 		[ -e $debug ] || echo "logging in"
-		echo "ehlo smtp.gmail.com" > ${SMTP[1]}
+		send_smtp "ehlo smtp.gmail.com"
 		state=1
 		;;
 	esac
@@ -202,25 +229,25 @@ loop_smtp() {
 			"250 SMTPUTF8"*)
 				[ -e $debug ] || echo logging in
 				state=3
-				echo auth login > ${SMTP[1]}
+				send_smtp "auth login"
 				;;
 
 			"334 VXNlcm5hbWU6"*)
 				[ -e $debug ] || echo sending email
 				state=4
-				echo "$email" > ${SMTP[1]}
+				send_smtp "$email"
 				;;
 
 			"334 UGFzc3dvcmQ6"*)
 				[ -e $debug ] || echo sending password
 				state=5
-				echo "$password" > ${SMTP[1]}
+				send_smtp "$password"
 				;;
 
 			"235 2.7.0"*)
-				[ -e $debug ] || { echo logged in; echo "$emaildec"; }
+				[ -e $debug ] || echo "logged in"
 				state=6
-				echo 'mail from: <'"$emaildec"'>' > ${SMTP[1]}
+				send_smtp 'mail from: <'"$emaildec"'>'
 				;;
 
 			"250 2.0.0"*)
@@ -232,7 +259,7 @@ loop_smtp() {
 			"250 2.1.0"*)
 				[ -e "$debug" ] || get_rcpt "$n"
 				state=7
-				echo rcpt to: '<'"$(get_rcpt $n)"'>' > ${SMTP[1]}
+				send_smtp 'rcpt to: <'"$(get_rcpt $n)"'>'
 				n=$((n - 1))
 				;;
 
@@ -240,19 +267,19 @@ loop_smtp() {
 				if [ ! $n = 0 ]
 				then
 					[ -e $debug ] || get_rcpt "$n"
-					echo rcpt to: '<'"$(get_rcpt $n)"'>' > ${SMTP[1]}
+					send_smtp 'rcpt to: <'"$(get_rcpt $n)"'>'
 					n=$((n - 1))
 				else
-					[ -e $debug ] || echo data
+					[ -e $debug ] || echo "data"
 					state=8
-					echo data > SMTP[0]
+					send_smtp "data"
 				fi
 				;;
 
 			"354  Go ahead"*)
 				state=9
-				cat .temp > SMTP[0]
-				echo '.' > SMTP[0]
+				cat .temp >&${SMTP[1]}
+				send_smtp '.'
 				;;
 
 			"451 4.4.2 Timeout"*)
@@ -559,6 +586,7 @@ case "$op" in
 			-crlf 2> /dev/null
 		}
 		state=0
+		compose 
 		loop_smtp
 		;;
 
@@ -571,5 +599,3 @@ case "$op" in
 		loop_imap
 		;;
 esac
-
-goodbye
