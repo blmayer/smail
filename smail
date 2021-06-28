@@ -78,6 +78,10 @@ read_opts() {
 				shift
 				subj="$1"
 				;;
+			"-f"|"--file")
+				shift
+				body="$1"
+				;;
 			"")
 				break
 				;;
@@ -189,7 +193,13 @@ compose() {
 		echo ""
 	} >> .temp
 
-	$editor .body
+	if [[ -e "$body" ]]
+	then
+		cp "$body" .body
+	else
+		$editor .body
+	fi
+	
 	sed 's/^.$/../' .body | fold -w 72 -s >> .temp
 	[ -e $debug ] || echo "Email body:"
 	[ -e $debug ] || cat .body
