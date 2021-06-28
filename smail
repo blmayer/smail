@@ -215,11 +215,12 @@ compose() {
 	echo "" >> .temp
 	echo "--$boundary" >> .temp
 
-	echo "Insert attachment(s)? [y/N]"
-	read -r attach
-	[ "$attach" = "y" ] && add_attachments "$boundary"
-
-	echo "--$boundary--" >> .temp
+	[ -e "$body" ] || {
+		echo "Insert attachment(s)? [y/N]"
+		read -r attach
+		[ "$attach" = "y" ] && add_attachments "$boundary"
+		echo "--$boundary--" >> .temp
+	}
 }
 
 loop_smtp() {
@@ -616,3 +617,4 @@ case "$op" in
 		loop_imap
 		;;
 esac
+		
