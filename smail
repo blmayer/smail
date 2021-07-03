@@ -330,10 +330,26 @@ loop_smtp() {
 
 ### ---- IMAP Stuff ------------------------------------------------------ ###
 
+detect_encoding() {
+	case "$1" in
+	"=?iso-8859-1?Q?"*)
+		echo "iso-8859-1"
+		;;
+	"=?utf-8?q?"* | "=?utf-8?Q?"* | "=?UTF-8?q?"*)
+		echo "utf-8"
+		;;
+	"=?UTF-8?B?"* | "=?utf-8?B?"*)
+		echo "utf-8/base64"
+		;;
+	esac
+}
+
 decode_string() {
 	# shellcheck disable=SC1112
-	case "$@" in
-	"=?iso-8859-1?Q?"*)
+	enc="$(detect_encoding $@)"
+
+	case "$enc" in
+	"iso-8859-1")
 		echo "$@" | sed -e 's/=?iso-8859-1?Q?//Ig' \
 		-e 's/?=//g' \
 		-e 's/=E7/ç/g' \
@@ -341,7 +357,7 @@ decode_string() {
 		-e 's/_/ /g' \
 		-e 's/=E3/ã/g'
 		;;
-	"=?utf-8?q?"* | "=?utf-8?Q?"*)
+	"utf-8")
 		echo "$@" | sed -e 's/.*=?utf-8?q?//Ig' \
 		-e 's/?=//g' \
 		-e 's/=F0=9F=8F=AD=C2=A0/🏭/g' \
@@ -349,12 +365,15 @@ decode_string() {
 		-e 's/=F0=9F=94=A5/🔥/g' \
 		-e 's/=e2=80=93/-/g' \
 		-e 's/=E2=80=99/’/g' \
+		-e 's/=CE=94/Δ/g' \
 		-e 's/=C3=BA/ú/g' \
 		-e 's/=C3=B5/õ/g' \
 		-e 's/=C3=B4/ô/g' \
 		-e 's/=C3=B3/ó/g' \
+		-e 's/=C3=96/Ö/g' \
 		-e 's/=C3=AD/í/g' \
 		-e 's/=C3=A9/é/g' \
+		-e 's/=C3=AA/ê/g' \
 		-e 's/=C3=A7/ç/g' \
 		-e 's/=C3=A3/ã/g' \
 		-e 's/=C3=A1/á/g' \
@@ -372,7 +391,7 @@ decode_string() {
 		-e 's/_/ /g' \
 		-e 's/=20/ /g'
 		;;
-	"=?UTF-8?B?"* | "=?utf-8?B?"*)
+	"utf-8/base64")
 		echo "$@" | sed -e 's/=?UTF-8?B?//Ig' \
 		-e 's/?=//g' | base64 -d
 		;;
@@ -419,7 +438,16 @@ select_inbox() {
 reply_email() {
 	echo "Reply? [y/N]"
 	read -r ans
-	echo "$ans"
+	if [ "$ans" = "y" ]
+	then
+		while read -r line
+		do
+			echo "> $line" >> "$cachedir/reply.txt"
+		done < "$cachedir/body.txt"
+		
+		smail send -f "$cachedir/reply.txt"
+		rm "$cachedir/reply.txt"
+	fi
 }
 
 read_content() {
@@ -427,12 +455,13 @@ read_content() {
 	do
 		msg="$(tr -d '\r' <<< $msg)"
 		[ -e $debug ] || echo "received: $msg"
-		[ "$msg" = "$boundary--" ] && break
+		[ "$msg" = "$boundary" ] && break
+
 		if [ "$1" = "base64" ]
 		then
-			base64 -d <<< "$msg" | decode_string >> .body
+			decode_string "=?${charset}?q?$(base64 -d <<< "$msg")" >> "$cachedir/body.txt"
 		else
-			echo "$msg" | decode_string >> .body
+			decode_string "=?${charset}?q?$msg" >> "$cachedir/body.txt"
 		fi
 	done
 }
@@ -441,13 +470,14 @@ read_body() {
 	while read -r -u ${IMAP[0]} msg
 	do
 		msg="$(tr -d '\r' <<< $msg)"
-		echo "received: $msg"
+		[ -e $debug ] || echo "received: $msg"
 		case "$msg" in
 		"--"*)
 			boundary="$msg"
 			;;
 		"Content-Type:"*)
-			ctype="$(sed 's/Content-Type: \(.*\);.*/\1/g' <<< $msg)"
+			ctype="$(cut -d ' ' -f 2 <<< $msg | tr -d ';')"
+			charset="$(cut -d '=' -f 2 <<< $msg | tr -d '"')"
 			;;
 		"Content-Transfer-Encoding:"*)
 			ttype="$(sed 's/Content-Transfer-Encoding: \(.*\)/\1/g' <<< $msg)"
@@ -464,9 +494,9 @@ read_body() {
 		esac
 	done
 
-	less .body
+	less "$cachedir/body.txt"
 	reply_email
-	rm .body
+	rm "$cachedir/body.txt"
 }
 
 read_email() {
@@ -511,11 +541,11 @@ get_email_info() {
 	done
 
 	cols=$(tput cols)
-	rest=$((cols - 66))
+	rest=$((cols - 67))
 
+	date="$(echo "$date" | cut -d ' ' -f 1-6)"
 	from="$(echo "$from" | sed 's/ <.*>//')"
 	from="$(decode_string "$from")"
-	date="$(echo "$date" | cut -d ' ' -f 1-6)"
 	subj="$(decode_string "$subj" | cut -b 1-$rest)"
 	
 	printf "%-6s %-28s %-30s %s" "$1" "$date" "${from,1,30}" "$subj"
@@ -619,8 +649,13 @@ function loop_imap() {
 
 ### ---- Main program ---------------------------------------------------- ###
 
-# Read arguments
 configfile="$HOME/.config/smail/smail.conf"
+datadir="$HOME/.local/share/smail"
+cachedir="$HOME/.cache/smail"
+[ -d "$datadir" ] || mkdir -p "$datadir"
+[ -d "$cachedir" ] || mkdir -p "$cachedir"
+
+# Read arguments
 read_opts "$@"
 
 # Configuration step
@@ -647,6 +682,7 @@ case "$op" in
 
 	"read" | "")
 		[[ $(tput cols) -le 74 ]] && echo "Needs at least 74 columns" && exit
+		
 		coproc IMAP {
 			openssl s_client -quiet -connect imap.gmail.com:993 \
 			-crlf 2> /dev/null
