@@ -254,34 +254,24 @@ loop_smtp() {
 				[ -e $debug ] || echo sending email
 				state=4
 				send_smtp "$email"
-				;;
-
-			"334 UGFzc3dvcmQ6"*)
+				;;			"334 UGFzc3dvcmQ6"*)
 				[ -e $debug ] || echo sending password
 				state=5
 				send_smtp "$password"
-				;;
-
-			"235 2.7.0"*)
+				;;			"235 2.7.0"*)
 				[ -e $debug ] || echo "logged in"
 				state=6
 				send_smtp 'mail from: <'"$emaildec"'>'
-				;;
-
-			"250 2.0.0"*)
+				;;			"250 2.0.0"*)
 				state=10
 				rm .temp
 				break
-				;;
-
-			"250 2.1.0"*)
+				;;			"250 2.1.0"*)
 				[ -e "$debug" ] || get_rcpt "$n"
 				state=7
 				send_smtp 'rcpt to: <'"$(get_rcpt $n)"'>'
 				n=$((n - 1))
-				;;
-
-			"250 2.1.5"*)
+				;;			"250 2.1.5"*)
 				if [ ! $n = 0 ]
 				then
 					[ -e $debug ] || get_rcpt "$n"
@@ -292,20 +282,14 @@ loop_smtp() {
 					state=8
 					send_smtp "data"
 				fi
-				;;
-
-			"354  Go ahead"*)
+				;;			"354  Go ahead"*)
 				state=9
 				cat .temp >&${SMTP[1]}
 				send_smtp '.'
-				;;
-
-			"451 4.4.2 Timeout"*)
+				;;			"451 4.4.2 Timeout"*)
 				[ -e $debug ] || echo "Connection closed"
 				break
-				;;
-
-			"501 5.5.2 Cannot Decode response"*)
+				;;			"501 5.5.2 Cannot Decode response"*)
 				state=3
 				retry
 		 		;;
@@ -353,6 +337,8 @@ decode_string() {
 		echo "$@" | sed -e 's/=?iso-8859-1?Q?//Ig' \
 		-e 's/?=//g' \
 		-e 's/=E7/ç/g' \
+		-e 's/=ED/í/g' \
+		-e 's/_/ /g' \
 		-e 's/=E3/ã/g'
 		;;
 	"=?utf-8?q?"* | "=?utf-8?Q?"*)
@@ -360,6 +346,7 @@ decode_string() {
 		-e 's/?=//g' \
 		-e 's/=F0=9F=8F=AD=C2=A0/🏭/g' \
 		-e 's/=C2=A0=F0=9F=91=87/👇/g' \
+		-e 's/=F0=9F=94=A5/🔥/g' \
 		-e 's/=e2=80=93/-/g' \
 		-e 's/=E2=80=99/’/g' \
 		-e 's/=C3=BA/ú/g' \
@@ -382,6 +369,7 @@ decode_string() {
 		-e 's/=28/(/g' \
 		-e 's/=29/)/g' \
 		-e 's/=21/!/g' \
+		-e 's/_/ /g' \
 		-e 's/=20/ /g'
 		;;
 	"=?UTF-8?B?"* | "=?utf-8?B?"*)
@@ -428,7 +416,76 @@ select_inbox() {
 	send_imap "select inbox"
 }
 
-get_email() {
+reply_email() {
+	echo "Reply? [y/N]"
+	read -r ans
+	echo "$ans"
+}
+
+read_content() {
+	while read -r -u ${IMAP[0]} msg
+	do
+		msg="$(tr -d '\r' <<< $msg)"
+		[ -e $debug ] || echo "received: $msg"
+		[ "$msg" = "$boundary--" ] && break
+		if [ "$1" = "base64" ]
+		then
+			base64 -d <<< "$msg" | decode_string >> .body
+		else
+			echo "$msg" | decode_string >> .body
+		fi
+	done
+}
+
+read_body() {
+	while read -r -u ${IMAP[0]} msg
+	do
+		msg="$(tr -d '\r' <<< $msg)"
+		echo "received: $msg"
+		case "$msg" in
+		"--"*)
+			boundary="$msg"
+			;;
+		"Content-Type:"*)
+			ctype="$(sed 's/Content-Type: \(.*\);.*/\1/g' <<< $msg)"
+			;;
+		"Content-Transfer-Encoding:"*)
+			ttype="$(sed 's/Content-Transfer-Encoding: \(.*\)/\1/g' <<< $msg)"
+			;;
+		"")
+			[ "$ctype" = "text/plain" ] && read_content "$ttype"
+			;;
+		"a$seq OK"*)
+			break
+			;;
+		"a$seq BAD"*)
+			break
+			;;
+		esac
+	done
+
+	less .body
+	reply_email
+	rm .body
+}
+
+read_email() {
+	arg="$1"
+	[ -z "$arg" ] && echo "Enter id: " && read arg
+	send_imap "fetch $arg BODY[TEXT]"
+		
+	read_body
+}
+
+peek_email() {
+	arg="$1"
+	[ -z "$arg" ] && echo "Enter id: " && read arg
+	send_imap "fetch $arg BODY.PEEK[TEXT]"
+		
+	read_body
+}
+
+get_email_info() {
 	send_imap "fetch $1 BODY.PEEK[HEADER]"
 
 	while read -r -u ${IMAP[0]} msg
@@ -439,10 +496,10 @@ get_email() {
 			break
 			;;
 		'From:'*)
-			from="$(cut -d ' ' -f 2 <<< "$msg" | tr -d '\r')"
+			from="$(sed 's/From: \(.*\) <.*/\1/g' <<< "$msg" | tr -d '"\r')"
 			;;
 		'Date:'*)
-			date="$(cut -d ' ' -f 2-6 <<< "$msg" | tr -d '\r')"
+			date="$(sed 's/Date: \(.*\) [+-].*/\1/g' <<< "$msg" | tr -d '\r')"
 			;;
 		'Subject:'*)
 			subj="$(cut -d ' ' -f 2- <<< "$msg" | tr -d '\r')"
@@ -453,12 +510,15 @@ get_email() {
 		esac
 	done
 
+	cols=$(tput cols)
+	rest=$((cols - 66))
+
 	from="$(echo "$from" | sed 's/ <.*>//')"
 	from="$(decode_string "$from")"
 	date="$(echo "$date" | cut -d ' ' -f 1-6)"
-	subj="$(decode_string "$subj")"
+	subj="$(decode_string "$subj" | cut -b 1-$rest)"
 	
-	printf "%s\t\t%s\t%s\t\t%s" "$1" "$date" "$from" "$subj"
+	printf "%-6s %-28s %-30s %s" "$1" "$date" "${from,1,30}" "$subj"
 	echo ""
 }
 
@@ -486,60 +546,39 @@ fetch_unseen() {
 
 	# Parsing response
 	[ -e $debug ] || echo "Getting individual mails $res"
-	echo "id		date received			from			subject"
+	echo "id     date received                from                           subject"
 	for mail in $res
 	do
 		[ -e $debug ] || echo "Getting $mail"
-		get_email "$mail"
+		get_email_info "$mail"
 	done
 }
 
 read_command() {
-	echo "Type command:"
-	echo "1) search	2) fetch	3) quit"
+	echo "Type command:       1) read [id]  2) peek [id]  3) search       4) quit"
 
-	read -r comm
+	read -r comm args
 	case "$comm" in
-		"1" | "search")
+		"1")
+			read_email "$args"
+			;;
+		"2")
+			peek_email "$args"
+			;;
+		"3" | "search")
 			echo "Type search:"
 			read -r search
 			send_imap "search $search"
 			;;
-		"3" | "q" | "quit")
+		"4" | "q" | "quit")
 			send_imap "LOGOUT"
-			exit 0
+			state=4
 			;;
 		*)
 			echo "Not an option, type quit to quit"
 			;;
 	esac
-
-	echo "reading"
-	while read -r -u ${SMTP[1]} msg
-	do
-		[ -e $debug ] || echo "received: $msg"
-	done
-
-	[ -e $debug ] || echo "Getting individual mails"
-	for mail in $res
-	do
-		[ -e $debug ] || echo "Sending: a$seq fetch $mail BODY[TEXT]"
-		echo "a$seq fetch $mail BODY" > ${IMAP[1]}
-		while read -r -u ${IMAP[0]} msg
-		do
-			[ -e $debug ] || echo "received: $msg"
-			case "$msg" in
-					"a$seq OK"*)
-					break
-					;;
-				"a$seq BAD"*)
-					break
-					;;
-			esac
-		done 
-	done
 }
-
 
 function loop_imap() {
 	[ -e $debug ] || >&2 echo "Starting listener"
@@ -564,9 +603,7 @@ function loop_imap() {
 			3)
 				read_command
 				;;
-			8)
-				;;
-			9)
+			4)
 				break
 				;;
 			-1)
@@ -609,6 +646,7 @@ case "$op" in
 		;;
 
 	"read" | "")
+		[[ $(tput cols) -le 74 ]] && echo "Needs at least 74 columns" && exit
 		coproc IMAP {
 			openssl s_client -quiet -connect imap.gmail.com:993 \
 			-crlf 2> /dev/null
@@ -617,4 +655,3 @@ case "$op" in
 		loop_imap
 		;;
 esac
-		
