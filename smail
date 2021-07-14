@@ -376,6 +376,7 @@ decode_string() {
 		-e 's/=C3=AA/ê/g' \
 		-e 's/=C3=A7/ç/g' \
 		-e 's/=C3=A3/ã/g' \
+		-e 's/=C3=A2/â/g' \
 		-e 's/=C3=A1/á/g' \
 		-e 's/=C3=A0/à/g' \
 		-e 's/=3F/?/g' \
