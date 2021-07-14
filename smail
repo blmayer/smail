@@ -254,24 +254,29 @@ loop_smtp() {
 				[ -e $debug ] || echo sending email
 				state=4
 				send_smtp "$email"
-				;;			"334 UGFzc3dvcmQ6"*)
+				;;
+			"334 UGFzc3dvcmQ6"*)
 				[ -e $debug ] || echo sending password
 				state=5
 				send_smtp "$password"
-				;;			"235 2.7.0"*)
+				;;
+			"235 2.7.0"*)
 				[ -e $debug ] || echo "logged in"
 				state=6
 				send_smtp 'mail from: <'"$emaildec"'>'
-				;;			"250 2.0.0"*)
+				;;
+			"250 2.0.0"*)
 				state=10
 				rm $cachedir/temp
 				break
-				;;			"250 2.1.0"*)
+				;;
+			"250 2.1.0"*)
 				[ -e "$debug" ] || get_rcpt "$n"
 				state=7
 				send_smtp 'rcpt to: <'"$(get_rcpt $n)"'>'
 				n=$((n - 1))
-				;;			"250 2.1.5"*)
+				;;
+			"250 2.1.5"*)
 				if [ ! $n = 0 ]
 				then
 					[ -e $debug ] || get_rcpt "$n"
@@ -282,14 +287,17 @@ loop_smtp() {
 					state=8
 					send_smtp "data"
 				fi
-				;;			"354  Go ahead"*)
+				;;
+			"354  Go ahead"*)
 				state=9
 				cat $cachedir/temp >&${SMTP[1]}
 				send_smtp '.'
-				;;			"451 4.4.2 Timeout"*)
+				;;
+			"451 4.4.2 Timeout"*)
 				[ -e $debug ] || echo "Connection closed"
 				break
-				;;			"501 5.5.2 Cannot Decode response"*)
+				;;
+			"501 5.5.2 Cannot Decode response"*)
 				state=3
 				retry
 		 		;;
