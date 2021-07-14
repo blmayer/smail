@@ -143,8 +143,8 @@ add_attachments() {
 			echo "Content-Disposition: attachment;"
 			echo " filename= \"$annexname\""
 			echo ""
-		} >> .temp
-		base64 "$annex" >> .temp
+		} >> $cachedir/temp
+		base64 "$annex" >> $cachedir/temp
 		[ -e $debug ] || echo "Added $annex with name: $annexname"
 	else
 		echo "ERROR: File not found!"
@@ -152,7 +152,7 @@ add_attachments() {
 
 	echo "Add another attachment(s)? [y/N]"
 	read -r another
-	[ "$another" = "y" ] && { echo "--$1" >> .temp; add_attachments "$1"; }
+	[ "$another" = "y" ] && { echo "--$1" >> $cachedir/temp; add_attachments "$1"; }
 }
 
 get_rcpt() {
@@ -171,10 +171,10 @@ compose() {
 		read -r cco
 	}
 
-	echo "To: $to" > .temp
-	echo "From: $emaildec" >> .temp
-	[ -n "$cc" ] && { echo "Cc: $cc" >> .temp; to="$to,$cc"; }
-	[ -n "$cco" ] && { echo "Cco: $cco" >> .temp; to="$to,$cco"; }
+	echo "To: $to" > $cachedir/temp
+	echo "From: $emaildec" >> $cachedir/temp
+	[ -n "$cc" ] && { echo "Cc: $cc" >> $cachedir/temp; to="$to,$cc"; }
+	[ -n "$cco" ] && { echo "Cco: $cco" >> $cachedir/temp; to="$to,$cco"; }
 
 	# Transform into list for sending later
 	n=$(($(echo "$to" | tr -d -c ',' | wc -c | xargs) + 1))
@@ -183,10 +183,10 @@ compose() {
 		echo "Type subject:"
 		read -r subj
 	}
-	echo "Subject: $subj" >> .temp
+	echo "Subject: $subj" >> $cachedir/temp
 
 	[ -e $debug ] || echo "Email fields:"
-	[ -e $debug ] || cat .temp
+	[ -e $debug ] || cat $cachedir/temp
 
 	boundary="$(date | tr " :-" "wUX")"
 	{
@@ -198,28 +198,28 @@ compose() {
 		echo "--$boundary"
 		echo 'Content-Type: text/plain; charset=US-ASCII'
 		echo ""
-	} >> .temp
+	} >> $cachedir/temp
 
 	if [[ -e "$body" ]]
 	then
-		cp "$body" .body
+		cp "$body" $cachedir/body
 	else
-		$editor .body
+		$editor $cachedir/body
 	fi
 
-	sed 's/^.$/../' .body | fold -w 72 -s >> .temp
+	sed 's/^.$/../' $cachedir/body | fold -w 72 -s >> $cachedir/temp
 	[ -e $debug ] || echo "Email body:"
-	[ -e $debug ] || cat .body
-	rm .body
+	[ -e $debug ] || cat $cachedir/body
+	rm $cachedir/body
 
-	echo "" >> .temp
-	echo "--$boundary" >> .temp
+	echo "" >> $cachedir/temp
+	echo "--$boundary" >> $cachedir/temp
 
 	[ -e "$body" ] || {
 		echo "Insert attachment(s)? [y/N]"
 		read -r attach
 		[ "$attach" = "y" ] && add_attachments "$boundary"
-		echo "--$boundary--" >> .temp
+		echo "--$boundary--" >> $cachedir/temp
 	}
 }
 
@@ -264,7 +264,7 @@ loop_smtp() {
 				send_smtp 'mail from: <'"$emaildec"'>'
 				;;			"250 2.0.0"*)
 				state=10
-				rm .temp
+				rm $cachedir/temp
 				break
 				;;			"250 2.1.0"*)
 				[ -e "$debug" ] || get_rcpt "$n"
@@ -284,7 +284,7 @@ loop_smtp() {
 				fi
 				;;			"354  Go ahead"*)
 				state=9
-				cat .temp >&${SMTP[1]}
+				cat $cachedir/temp >&${SMTP[1]}
 				send_smtp '.'
 				;;			"451 4.4.2 Timeout"*)
 				[ -e $debug ] || echo "Connection closed"
