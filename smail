@@ -343,7 +343,7 @@ detect_encoding() {
 	"=?iso-8859-1?Q?"*)
 		echo "iso-8859-1"
 		;;
-	"=?utf-8?q?"* | "=?utf-8?Q?"* | "=?UTF-8?q?"*)
+	"=?utf-8?q?"* | "=?utf-8?Q?"* | "=?UTF-8?q?"* | "=?utf-8; format?q?"*)
 		echo "utf-8"
 		;;
 	"=?UTF-8?B?"* | "=?utf-8?B?"*)
@@ -366,7 +366,7 @@ decode_string() {
 		-e 's/=E3/ã/g'
 		;;
 	"utf-8")
-		echo "$@" | sed -e 's/.*=?utf-8?q?//Ig' \
+		echo "$@" | sed -e 's/.*=?utf-8\(; format\)\??q?//Ig' \
 		-e 's/?=//g' \
 		-e 's/=F0=9F=8F=AD=C2=A0/🏭/g' \
 		-e 's/=C2=A0=F0=9F=91=87/👇/g' \
