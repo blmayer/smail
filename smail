@@ -108,13 +108,13 @@ configure() {
 
 	echo "Enter email:"
 	read -r username
-	echo "email=$(echo "$username" | base64 )" > "$configfile"
+	echo "email=\"$username\"" > "$configfile"
 
 	echo "Enter password:"
 	stty -echo
 	read -r password
 	stty echo
-	echo "password=$(echo "$password" | base64 )" >> "$configfile"
+	echo "password=\"$password\"" >> "$configfile"
 
 	echo "Enter your favorite editor: [vi]"
 	# shellcheck disable=SC2039
@@ -125,7 +125,8 @@ configure() {
 
 send_smtp() {
 	[ -e $debug ] || echo "Sending: $*"
-	echo "$*" >&${SMTP[1]}
+	echo "$*" >&"${SMTP[1]}"
+	#printf "%s\r\n" "$*" > "$smtp"
 }
 
 add_attachments() {
@@ -150,7 +151,7 @@ add_attachments() {
 		echo "ERROR: File not found!"
 	fi
 
-	echo "Add another attachment(s)? [y/N]"
+	echo 'Add another attachment(s)? [y/N]'
 	read -r another
 	[ "$another" = "y" ] && { echo "--$1" >> $cachedir/temp; add_attachments "$1"; }
 }
@@ -160,19 +161,20 @@ get_rcpt() {
 }
 
 compose() {
+	echo "From: $email" > $cachedir/temp
+
 	[[ -z "$to" ]] && {
-		echo "Type recipient(s) (comma separated):"
+		echo 'Type recipient(s) (comma separated):'
 		read -r to
 
-		echo "Type Cc(s): (comma separated)"
+		echo 'Type Cc(s): (comma separated)'
 		read -r cc
 
-		echo "Type Cco(s): (comma separated)"
+		echo 'Type Cco(s): (comma separated)'
 		read -r cco
 	}
 
-	echo "To: $to" > $cachedir/temp
-	echo "From: $emaildec" >> $cachedir/temp
+	echo "To: $to" >> $cachedir/temp
 	[ -n "$cc" ] && { echo "Cc: $cc" >> $cachedir/temp; to="$to,$cc"; }
 	[ -n "$cco" ] && { echo "Cco: $cco" >> $cachedir/temp; to="$to,$cco"; }
 
@@ -216,7 +218,7 @@ compose() {
 	echo "--$boundary" >> $cachedir/temp
 
 	[ -e "$body" ] || {
-		echo "Insert attachment(s)? [y/N]"
+		echo 'Insert attachment(s)? [y/N]'
 		read -r attach
 		[ "$attach" = "y" ] && add_attachments "$boundary"
 		echo "--$boundary--" >> $cachedir/temp
@@ -224,85 +226,81 @@ compose() {
 }
 
 loop_smtp() {
-	case "$state" in
-	0)
-		[ -e $debug ] || echo "logging in"
-		send_smtp "ehlo smtp.gmail.com"
-		state=1
-		;;
-	esac
+	# read -r msg < "$sin"
+
+	# case "$state" in
+	# 0)
+	# 	[ -e $debug ] || echo "sending hello"
+	# 	state=1
+	# 	;;
+	# esac
 
 	[ -e $debug ] || echo "listening"
-	while read -r -u ${SMTP[0]} msg
+	while read -r msg
 	do
 		[ -e $debug ] || echo "received: $msg"
 		case $msg in
-			"221 2.0.0"*)
-				retry
+			"220"*)
+				state=1
 				;;
-
-			"250-"*)
+			"221"*)
+				state=-1
 				;;
-
-			"250 SMTPUTF8"*)
-				[ -e $debug ] || echo logging in
-				state=3
-				send_smtp "auth login"
-				;;
-
-			"334 VXNlcm5hbWU6"*)
-				[ -e $debug ] || echo sending email
-				state=4
-				send_smtp "$email"
-				;;
-			"334 UGFzc3dvcmQ6"*)
-				[ -e $debug ] || echo sending password
-				state=5
-				send_smtp "$password"
-				;;
-			"235 2.7.0"*)
+			"235"*)
 				[ -e $debug ] || echo "logged in"
-				state=6
-				send_smtp 'mail from: <'"$emaildec"'>'
+				state="$((state+1))"
 				;;
+			"250-"*)
+				grep -q AUTH <<< "$msg" && auth=1
+				;;
+			"250 "* | "354 "*) state="$((state+1))" ;;
+			"250 2.0.0 Roger"*)
+				[ -e "$debug" ] || get_rcpt "$n"
+				send_smtp 'rcpt to: <'"$(get_rcpt $n)"'>'
+				n=$((n - 1))
+				state=8
+				;;
+			"250 2.1.5"*)
+				if [ ! $n = 0 ]
+				then
+					state=8
+				else
+					state=10
+				fi
+				;;
+			"250 2.0.0 Hello"*)
+				grep -q AUTH <<< "$msg" && auth=1
+				if [ "$auth" ]
+				then
+					[ -e $debug ] || echo logging in
+					state=3
+					send_smtp "auth login"
+				else
+					[ -e $debug ] || echo sending mail
+					state=6
+					send_smtp "mail from:$email"
+				fi ;;
 			"250 2.0.0"*)
 				state=10
 				rm $cachedir/temp
 				break
 				;;
-			"250 2.1.0"*)
-				[ -e "$debug" ] || get_rcpt "$n"
-				state=7
-				send_smtp 'rcpt to: <'"$(get_rcpt $n)"'>'
-				n=$((n - 1))
+			"334"*)
+				state="$((state+1))"
 				;;
-			"250 2.1.5"*)
-				if [ ! $n = 0 ]
-				then
-					[ -e $debug ] || get_rcpt "$n"
-					send_smtp 'rcpt to: <'"$(get_rcpt $n)"'>'
-					n=$((n - 1))
-				else
-					[ -e $debug ] || echo "data"
-					state=8
-					send_smtp "data"
-				fi
-				;;
-			"354  Go ahead"*)
-				state=9
-				cat $cachedir/temp >&${SMTP[1]}
-				send_smtp '.'
+			"354 "*)
+				state=12
 				;;
 			"451 4.4.2 Timeout"*)
 				[ -e $debug ] || echo "Connection closed"
 				break
 				;;
-			"501 5.5.2 Cannot Decode response"*)
-				state=3
-				retry
+			"454"*) state=4 ;;
+			"501"*)
+				state=1
 		 		;;
-			"502 5.5.1 Unrecognized command"*)
-				retry
+			"502 5.7.0 "*)
+				state=13
 				;;
 			"503 5.5.1 MAIL first"*)
 				state=6
@@ -333,7 +331,41 @@ loop_smtp() {
 				break
 				;;
 		esac
-	done
+		smtp
+	done <&"${SMTP[0]}"
+}
+
+smtp() {
+	[ -e $debug ] || echo "($state) Sending command"
+	case "$state" in
+		1) send_smtp "ehlo $smtpserver"; state=2 ;;
+		3)
+			[ -e $debug ] || echo logging in
+			state=4
+			send_smtp "auth plain $(printf "\0$email\0$password" | base64)"
+			;;
+		5) send_smtp 'mail from: <'"$email"'>'; state=6 ;;
+		7)
+			if [ ! $n = 0 ]
+			then
+				send_smtp 'rcpt to: <'"$(get_rcpt $n)"'>'
+				n=$((n - 1))
+				state=6
+			else
+				send_smtp "data"
+				state=8
+			fi
+			;;
+		9)
+			cat $cachedir/temp >&"${SMTP[1]}" 
+			send_smtp '.'
+			state=10
+			;;
+		11) send_smtp "quit"; state=12 ;;
+		13) exit ;;
+		-1|-3|11) exit ;;
+		*) sleep 1 ;;
+	esac
 }
 
 ### ---- IMAP Stuff ------------------------------------------------------ ###
@@ -393,7 +425,7 @@ decode_string() {
 		-e 's/=20/ /g' \
 		-e 's/=20/ /g' \
 		-e 's/=20/ /g' \
-		-e "s/=27/\\'/g" \
+		-e "s/=27/\\'/g"
 		-e 's/=28/(/g' \
 		-e 's/=29/)/g' \
 		-e 's/=21/!/g' \
@@ -419,7 +451,7 @@ send_imap() {
 
 auth_imap() {
 	[ -e $debug ] || echo "Authenticating"
-	send_imap "login $emaildec $passworddec"
+	send_imap "login $email $password"
 
 	while read -r -u ${IMAP[0]} msg
 	do
@@ -594,7 +626,7 @@ fetch_unseen() {
 }
 
 read_command() {
-	echo "Type command:       1) read [id]  2) peek [id]  3) search       4) quit"
+	echo 'Type command:       1) read [id]  2) peek [id]  3) search       4) quit'
 
 	read -r comm args
 	case "$comm" in
@@ -658,34 +690,38 @@ function loop_imap() {
 
 ### ---- Main program ---------------------------------------------------- ###
 
+# TODO: add trap
+
+
+# TODO: add support to XDG
 configfile="$HOME/.config/smail/smail.conf"
 datadir="$HOME/.local/share/smail"
 cachedir="$HOME/.cache/smail"
 [ -d "$datadir" ] || mkdir -p "$datadir"
 [ -d "$cachedir" ] || mkdir -p "$cachedir"
 
+conn="$cachedir/conn"
+
 # Read arguments
 read_opts "$@"
 
 # Configuration step
 [ -e "$configfile" ] || configure
-
-email=$(grep email "$configfile" | cut -d '=' -f 2,3)
-emaildec=$(echo "$email" | base64 -d)
-password=$(grep password "$configfile" | cut -d '=' -f 2,3)
-passworddec=$(echo "$password" | base64 -d)
-editor=$(grep editor "$configfile" | cut -d '=' -f 2)
+. "$configfile"
 
 case "$op" in 
 	"send")
-		coproc SMTP {
-			openssl s_client -quiet \
-			-starttls smtp \
-			-connect smtp.gmail.com:587 \
-			-crlf 2> /dev/null
-		}
-		state=0
+		#openssl s_client \
+		#-connect "$smtpserver":"$smtpport" \
+		#-crlf
 		compose 
+
+		[ -e $debug ] || >&2 echo "Starting nc"
+		coproc SMTP {
+			nc "$smtpserver" "$smtpport" 
+		}
+
+		state=0
 		loop_smtp
 		;;
 
@@ -693,7 +729,7 @@ case "$op" in
 		[[ $(tput cols) -le 74 ]] && echo "Needs at least 74 columns" && exit
 		
 		coproc IMAP {
-			openssl s_client -quiet -connect imap.gmail.com:993 \
+			openssl s_client -quiet -connect "$imapserver":"$impapport" \
 			-crlf 2> /dev/null
 		}
 		state=0
