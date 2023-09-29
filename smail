@@ -679,9 +679,9 @@ case "$op" in
 				nc "$smtpserver" "$smtpport" 
 			else
 				[ -e $debug ] || >&2 echo "Starting openssl"
-				openssl s_client \
+				openssl s_client -starttls smtp \
 				-connect "$smtpserver":"$smtpport" \
-				-crlf -quiet >&2 > /dev/null
+				-crlf -quiet 2> /dev/null
 			fi
 		}
 
