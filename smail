@@ -126,7 +126,6 @@ configure() {
 send_smtp() {
 	[ -e $debug ] || echo "Sending: $*"
 	echo "$*" >&"${SMTP[1]}"
-	#printf "%s\r\n" "$*" > "$smtp"
 }
 
 add_attachments() {
@@ -226,15 +225,6 @@ compose() {
 }
 
 loop_smtp() {
-	# read -r msg < "$sin"
-
-	# case "$state" in
-	# 0)
-	# 	[ -e $debug ] || echo "sending hello"
-	# 	state=1
-	# 	;;
-	# esac
-
 	[ -e $debug ] || echo "listening"
 	while read -r msg
 	do
@@ -254,37 +244,6 @@ loop_smtp() {
 				grep -q AUTH <<< "$msg" && auth=1
 				;;
 			"250 "* | "354 "*) state="$((state+1))" ;;
-			"250 2.0.0 Roger"*)
-				[ -e "$debug" ] || get_rcpt "$n"
-				send_smtp 'rcpt to: <'"$(get_rcpt $n)"'>'
-				n=$((n - 1))
-				state=8
-				;;
-			"250 2.1.5"*)
-				if [ ! $n = 0 ]
-				then
-					state=8
-				else
-					state=10
-				fi
-				;;
-			"250 2.0.0 Hello"*)
-				grep -q AUTH <<< "$msg" && auth=1
-				if [ "$auth" ]
-				then
-					[ -e $debug ] || echo logging in
-					state=3
-					send_smtp "auth login"
-				else
-					[ -e $debug ] || echo sending mail
-					state=6
-					send_smtp "mail from:$email"
-				fi ;;
-			"250 2.0.0"*)
-				state=10
-				rm $cachedir/temp
-				break
-				;;
 			"334"*)
 				state="$((state+1))"
 				;;
@@ -711,14 +670,19 @@ read_opts "$@"
 
 case "$op" in 
 	"send")
-		#openssl s_client \
-		#-connect "$smtpserver":"$smtpport" \
-		#-crlf
 		compose 
 
-		[ -e $debug ] || >&2 echo "Starting nc"
 		coproc SMTP {
-			nc "$smtpserver" "$smtpport" 
+			if [ -e "$smtptls" ]
+			then
+				[ -e $debug ] || >&2 echo "Starting nc"
+				nc "$smtpserver" "$smtpport" 
+			else
+				[ -e $debug ] || >&2 echo "Starting openssl"
+				openssl s_client \
+				-connect "$smtpserver":"$smtpport" \
+				-crlf -quiet >&2 > /dev/null
+			fi
 		}
 
 		state=0
