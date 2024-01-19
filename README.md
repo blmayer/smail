@@ -1,6 +1,6 @@
 # smail
 
-![Build Status](https://img.shields.io/travis/blmayer/smail/master.svg?label=shellcheck)
+[![shellcheck](https://github.com/blmayer/smail/actions/workflows/main.yml/badge.svg)](https://github.com/blmayer/smail/actions/workflows/main.yml)
 
 > Simplest email client for the terminal. It is just a telnet.
 
