@@ -410,14 +410,14 @@ send_imap() {
 
 auth_imap() {
 	[ -e $debug ] || echo "Authenticating"
-	send_imap "login $email $password"
+	send_imap "login \"$email\" \"$password\""
 
 	while read -r -u ${IMAP[0]} msg
 	do
 		[ -e $debug ] || echo "received: $msg"
 		case "$msg" in
 		"a$seq OK"*)
-			return 1
+			return 0
 			break
 			;;
 
@@ -427,7 +427,7 @@ auth_imap() {
 		esac
 	done
 
-	return 0
+	return 1
 }
 
 select_inbox() {
