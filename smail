@@ -323,7 +323,7 @@ smtp() {
 		11) send_smtp "quit"; state=12 ;;
 		13) exit ;;
 		-1|-3|11) exit ;;
-		*) sleep 1 ;;
+		# *) sleep 1 ;;
 	esac
 }
 
@@ -686,6 +686,7 @@ case "$op" in
 		}
 
 		state=0
+		send_smtp "ehlo $smtpserver"
 		loop_smtp
 		;;
 
