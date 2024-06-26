@@ -20,10 +20,10 @@ usage() {
 	echo "Options for send command:"
 	echo "  -t,--to	list of emails to send to (comma separated)"
 	echo "  -s,--subject	email subject"
-	echo "  --cc		carbon copy list of emails"	
+	echo "  --cc		carbon copy list of emails"
 	echo "  --cco		hidden carbon copy list of emails"
 	echo "  -f,--file	file to be used as body"
-	echo ""	
+	echo ""
 	echo "Examples:"
 	echo "  smail config	Run the configuration script"
 	echo "  smail		Read emails"
@@ -195,7 +195,7 @@ compose() {
 		echo "Content-Type: multipart/mixed;"
 		echo " boundary= \"$boundary\""
 		echo ""
-	
+
 		echo "--$boundary"
 		echo 'Content-Type: text/plain; charset=US-ASCII'
 		echo ""
@@ -316,7 +316,7 @@ smtp() {
 			fi
 			;;
 		9)
-			cat $cachedir/temp >&"${SMTP[1]}" 
+			cat $cachedir/temp >&"${SMTP[1]}"
 			send_smtp '.'
 			state=10
 			;;
@@ -420,7 +420,7 @@ auth_imap() {
 			return 1
 			break
 			;;
-	
+
 		"a$seq BAD"*)
 			break
 			;;
@@ -444,7 +444,7 @@ reply_email() {
 		do
 			echo "> $line" >> "$cachedir/reply.txt"
 		done < "$cachedir/body.txt"
-		
+
 		smail send -f "$cachedir/reply.txt"
 		rm "$cachedir/reply.txt"
 	fi
@@ -503,7 +503,7 @@ read_email() {
 	arg="$1"
 	[ -z "$arg" ] && echo "Enter id: " && read arg
 	send_imap "fetch $arg BODY[TEXT]"
-		
+
 	read_body
 }
 
@@ -511,7 +511,7 @@ peek_email() {
 	arg="$1"
 	[ -z "$arg" ] && echo "Enter id: " && read arg
 	send_imap "fetch $arg BODY.PEEK[TEXT]"
-		
+
 	read_body
 }
 
@@ -547,7 +547,7 @@ get_email_info() {
 	from="$(echo "$from" | sed 's/ <.*>//')"
 	from="$(decode_string "$from")"
 	subj="$(decode_string "$subj" | cut -b 1-$rest)"
-	
+
 	printf "%-6s %-28s %-30s %s" "$1" "$date" "${from,1,30}" "$subj"
 	echo ""
 }
@@ -644,7 +644,7 @@ function loop_imap() {
 				[ -e $debug ] || echo "Unrecognized state"
 				;;
 		esac
-	done 
+	done
 }
 
 ### ---- Main program ---------------------------------------------------- ###
@@ -668,15 +668,15 @@ read_opts "$@"
 [ -e "$configfile" ] || configure
 . "$configfile"
 
-case "$op" in 
+case "$op" in
 	"send")
-		compose 
+		compose
 
 		coproc SMTP {
 			if [ -e "$smtptls" ]
 			then
 				[ -e $debug ] || >&2 echo "Starting nc"
-				nc "$smtpserver" "$smtpport" 
+				nc "$smtpserver" "$smtpport"
 			else
 				[ -e $debug ] || >&2 echo "Starting openssl"
 				openssl s_client -starttls smtp \
@@ -691,7 +691,7 @@ case "$op" in
 
 	"read" | "")
 		[[ $(tput cols) -le 74 ]] && echo "Needs at least 74 columns" && exit
-		
+
 		coproc IMAP {
 			openssl s_client -quiet -connect "$imapserver":"$impapport" \
 			-crlf 2> /dev/null
