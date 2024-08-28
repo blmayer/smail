@@ -1,7 +1,7 @@
 #!/bin/bash
 
 usage() {
-	echo "Smail v0.1.0: Send or read emails from your terminal."
+	echo "Smail v0.7.0: Send or read emails from your terminal."
 	echo ""
 	echo "Usage: smail [options] [command]"
 	echo ""
@@ -34,7 +34,7 @@ usage() {
 }
 
 show_version() {
-	echo "smail 0.5.0"
+	echo "smail 0.7.0"
 	echo "Copyright (C) 2021 Brian Mayer."
 	echo "License MIT: MIT License <https://opensource.org/licenses/MIT>"
 	echo "THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,"
@@ -120,6 +120,18 @@ configure() {
 	# shellcheck disable=SC2039
 	read -re editor
 	echo "editor=${editor:-vi}" >> "$configfile"
+
+	echo "Enter your SMTP server DNS:"
+	read -re smtpserver
+	echo "smtpserver=$smtpserver" >> "$configfile"
+
+	echo "Enter your SMTP server port:"
+	read -re smtpport
+	echo "smtpport=$smtpport" >> "$configfile"
+
+	echo "Do your SMTP server supports TLS? [Y/n]"
+	read -re smtptls
+	echo "smtptls=${smtptls:-1}" >> "$configfile"
 	echo Done
 }
 
@@ -144,7 +156,7 @@ add_attachments() {
 			echo " filename= \"$annexname\""
 			echo ""
 		} >> $cachedir/temp
-		base64 "$annex" >> $cachedir/temp
+		base64 "$annex" >> "$cachedir/temp"
 		[ -e $debug ] || echo "Added $annex with name: $annexname"
 	else
 		echo "ERROR: File not found!"
@@ -152,7 +164,7 @@ add_attachments() {
 
 	echo 'Add another attachment(s)? [y/N]'
 	read -r another
-	[ "$another" = "y" ] && { echo "--$1" >> $cachedir/temp; add_attachments "$1"; }
+	[ "$another" = "y" ] && { echo "--$1" >> "$cachedir/temp"; add_attachments "$1"; }
 }
 
 get_rcpt() {
@@ -172,6 +184,9 @@ compose() {
 		echo 'Type Cco(s): (comma separated)'
 		read -r cco
 	}
+
+	key="$(gpg --auto-key-locate wkd --locate-keys "$to" | grep "$to")"
+	[ -e "$key" ] || echo "WKD key found for $to, sending encrypted email"
 
 	echo "To: $to" >> $cachedir/temp
 	[ -n "$cc" ] && { echo "Cc: $cc" >> $cachedir/temp; to="$to,$cc"; }
@@ -208,9 +223,17 @@ compose() {
 		$editor $cachedir/body
 	fi
 
-	sed 's/^.$/../' $cachedir/body | fold -w 72 -s >> $cachedir/temp
+	if [ ! -e "$key" ]
+	then
+		gpg --encrypt --armor --recipient "$to" "$cachedir/body"
+		cat "$cachedir/body.asc" >> "$cachedir/temp"
+		rm "$cachedir/body.asc"
+	else
+		sed 's/^.$/../' $cachedir/body | fold -w 72 -s >> $cachedir/temp
+	fi
+
 	[ -e $debug ] || echo "Email body:"
-	[ -e $debug ] || cat $cachedir/body
+	[ -e $debug ] || cat "$cachedir/temp"
 	rm $cachedir/body
 
 	echo "" >> $cachedir/temp
@@ -254,7 +277,7 @@ loop_smtp() {
 				[ -e $debug ] || echo "Connection closed"
 				break
 				;;
-			"454"*) state=4 ;;
+			"454"*) echo "$msg"; state=11 ;;
 			"501"*)
 				state=1
 		 		;;
@@ -301,7 +324,7 @@ smtp() {
 		3)
 			[ -e $debug ] || echo logging in
 			state=4
-			send_smtp "auth plain $(printf "\0$email\0$password" | base64)"
+			send_smtp "auth plain $(printf "\0%s\0%s" "$email" "$password" | base64)"
 			;;
 		5) send_smtp 'mail from: <'"$email"'>'; state=6 ;;
 		7)
