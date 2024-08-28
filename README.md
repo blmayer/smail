@@ -49,7 +49,8 @@ will do is show your unread email.
 
 ## Providers
 
-Currently only Gmail.
+Gmail needs app passwords, so there are extra steps for this. Smail should
+work with any email provider, since it uses normal SMTP commands.
 
 
 ## Why
