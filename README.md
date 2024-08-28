@@ -12,6 +12,7 @@
 - sed
 - cat
 - a text editor like vim or nano
+- gpg (optional)
 
 For gmail you'll need to create app passwords, and use them on the
 configuration step.

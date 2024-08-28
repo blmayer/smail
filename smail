@@ -185,7 +185,7 @@ compose() {
 		read -r cco
 	}
 
-	key="$(gpg --auto-key-locate wkd --locate-keys "$to" | grep "$to")"
+	command -v gpg --version &> /dev/null && key="$(gpg --auto-key-locate wkd --locate-keys "$to" | grep "$to")"
 	[ -e "$key" ] || echo "WKD key found for $to, sending encrypted email"
 
 	echo "To: $to" >> $cachedir/temp
